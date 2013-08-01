@@ -4,6 +4,11 @@ Drogon Arduino
 This is the Arduino sketch for the Drogon Quadcopter. This handles low-level 
 flight stabilization, navigation, and sensor managemen.
 
+NOTE: For using from Arduino IDE, clone this project into your Arduino 
+Sketchbook directory and rename cloned directory from 'drogon-arduino' 
+to simply 'drogon'. You will then be able to open the sketch from your
+sketchbook.
+
 Important
 ---------------------
 
