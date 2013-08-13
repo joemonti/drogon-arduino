@@ -29,16 +29,19 @@ int ledPin[NUM_LEDS];
 boolean lastLed[NUM_LEDS];
 int nextLedMillis[NUM_LEDS];
 
-void led_setup() {
+void led_setup( int motorLedPin0, 
+                int motorLedPin1,
+                int motorLedPin2,
+                int motorLedPin3 ) {
   for ( int i = 0; i < NUM_LEDS; i++ ) {
     lastLed[i] = LOW;
     nextLedMillis[i] = millis();
   }
   
-  ledPin[0] = MOTOR_LED_PIN0;
-  ledPin[1] = MOTOR_LED_PIN1;
-  ledPin[2] = MOTOR_LED_PIN2;
-  ledPin[3] = MOTOR_LED_PIN3;
+  ledPin[0] = motorLedPin0;
+  ledPin[1] = motorLedPin1;
+  ledPin[2] = motorLedPin2;
+  ledPin[3] = motorLedPin3;
 }
 
 void led_blink( int value1, int value2, int value3, int value4 ) {

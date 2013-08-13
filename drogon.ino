@@ -22,17 +22,17 @@
 
 #include <Servo.h>
 
-const int MOTOR_PIN0 = 2;
-const int MOTOR_PIN1 = 3;
-const int MOTOR_PIN2 = 4;
-const int MOTOR_PIN3 = 5;
+const int MOTOR_PIN0 = 8;
+const int MOTOR_PIN1 = 9;
+const int MOTOR_PIN2 = 10;
+const int MOTOR_PIN3 = 11;
 
 const int RECEIVER_PIN = 7;
 
-const int MOTOR_LED_PIN0 = 8;
-const int MOTOR_LED_PIN1 = 9;
-const int MOTOR_LED_PIN2 = 10;
-const int MOTOR_LED_PIN3 = 11;
+//const int MOTOR_LED_PIN0 = 8;
+//const int MOTOR_LED_PIN1 = 9;
+//const int MOTOR_LED_PIN2 = 10;
+//const int MOTOR_LED_PIN3 = 11;
 
 const int READY_LED_PIN = 13;
 const int ARMED_LED_PIN = 12;
@@ -41,16 +41,17 @@ const int ACCEL_PIN_X = 0;
 const int ACCEL_PIN_Y = 1;
 const int ACCEL_PIN_Z = 2;
 
-const int IR_PIN = 3;
+//const int IR_PIN = 3;
 
-const int MIN_MOTOR_VALUE = 21;
-const int MAX_MOTOR_VALUE = 180;
+const int MIN_MOTOR_VALUE = 1000;
+const int MAX_MOTOR_VALUE = 2000;
 
 const long STATE_BUFFER_TIME = 500;
+const long STATE_BUFFER_TIME_ARMED = 2000;
 
 const int STATE_PENDING = 0;
-const int STATE_READY = 0;
-const int STATE_ARMED = 0;
+const int STATE_READY = 1;
+const int STATE_ARMED = 2;
 
 int state;
 
@@ -78,18 +79,18 @@ void setup() {
   motor2.attach( MOTOR_PIN2 );
   motor3.attach( MOTOR_PIN3 );
   
-  pinMode( MOTOR_LED_PIN0, OUTPUT );
-  pinMode( MOTOR_LED_PIN1, OUTPUT );
-  pinMode( MOTOR_LED_PIN2, OUTPUT );
-  pinMode( MOTOR_LED_PIN3, OUTPUT );
+  //pinMode( MOTOR_LED_PIN0, OUTPUT );
+  ///pinMode( MOTOR_LED_PIN1, OUTPUT );
+  //pinMode( MOTOR_LED_PIN2, OUTPUT );
+  //pinMode( MOTOR_LED_PIN3, OUTPUT );
   
   pinMode( READY_LED_PIN, OUTPUT );
   pinMode( ARMED_LED_PIN, OUTPUT );
   
-  digitalWrite( MOTOR_LED_PIN0, LOW );
-  digitalWrite( MOTOR_LED_PIN1, LOW );
-  digitalWrite( MOTOR_LED_PIN2, LOW );
-  digitalWrite( MOTOR_LED_PIN3, LOW );
+  //digitalWrite( MOTOR_LED_PIN0, LOW );
+  //digitalWrite( MOTOR_LED_PIN1, LOW );
+  //digitalWrite( MOTOR_LED_PIN2, LOW );
+  //digitalWrite( MOTOR_LED_PIN3, LOW );
   
   digitalWrite( READY_LED_PIN, LOW );
   digitalWrite( ARMED_LED_PIN, LOW );
@@ -101,7 +102,10 @@ void setup() {
   
   receiver_setup();
   
-  led_setup();
+  //led_setup( MOTOR_LED_PIN0,
+  //           MOTOR_LED_PIN1,
+  //           MOTOR_LED_PIN2,
+  //           MOTOR_LED_PIN3 );
   accel_setup();
   gyro_setup();
   
@@ -131,7 +135,9 @@ void loop() {
         if ( millis() > receiverArmingEnding ) {
           state = STATE_ARMED;
           digitalWrite( ARMED_LED_PIN, HIGH );
-          stateBufferExpires = millis() + STATE_BUFFER_TIME;
+          stateBufferExpires = millis() + STATE_BUFFER_TIME_ARMED;
+          
+          zero_motors();
         }
         receiverArming = false;
       }
@@ -167,19 +173,19 @@ void loop() {
 
 void control_loop() {
   map_reciever();
-  //update_motors();
+  update_motors();
 }
 
 void map_reciever() {
 }
 
 void update_motors() {
-  motor0.write( motorValue0 );
-  motor1.write( motorValue1 );
-  motor2.write( motorValue2 );
-  motor3.write( motorValue3 );
+  motor0.writeMicroseconds( motorValue0 );
+  motor1.writeMicroseconds( motorValue1 );
+  motor2.writeMicroseconds( motorValue2 );
+  motor3.writeMicroseconds( motorValue3 );
   
-  led_blink( motorValue0, motorValue1, motorValue2, motorValue3 );
+  //led_blink( motorValue0, motorValue1, motorValue2, motorValue3 );
 }
 
 void zero_motors() {

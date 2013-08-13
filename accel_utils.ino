@@ -28,34 +28,38 @@ const int ACCEL_ZERO_DELAY = 10; // approx 5 seconds
 const float ACCEL_FILTER_ALPHA = 0.5;
 
 int accelZeroCount;
-float accelZeroXValues[ACCEL_ZERO_ITERS];
-float accelZeroYValues[ACCEL_ZERO_ITERS];
-float accelZeroZValues[ACCEL_ZERO_ITERS];
+int accelZeroXValues[ACCEL_ZERO_ITERS];
+int accelZeroYValues[ACCEL_ZERO_ITERS];
+int accelZeroZValues[ACCEL_ZERO_ITERS];
 boolean accelZerod;
 
-float accelZeroX;
-float accelZeroY;
-float accelZeroZ;
+int accelZeroX;
+int accelZeroY;
+int accelZeroZ;
 
-float accelX;
-float accelY;
-float accelZ;
+int accelX;
+int accelY;
+int accelZ;
 
 long accelNextUpdate;
 
-void accel_setup() {
-  analogReadResolution( ANALOG_RESOLUTION );
-  
+void accel_reset() {
   accelZeroCount = 0;
   accelZerod = false;
   
   accelNextUpdate = millis();
 }
 
+void accel_setup() {
+  analogReadResolution( ANALOG_RESOLUTION );
+  
+  accel_reset();
+}
+
 void accel_loop() {
-  float gx = analogRead( ACCEL_PIN_X );
-  float gy = analogRead( ACCEL_PIN_Y );
-  float gz = analogRead( ACCEL_PIN_Z );
+  int gx = analogRead( ACCEL_PIN_X );
+  int gy = analogRead( ACCEL_PIN_Y );
+  int gz = analogRead( ACCEL_PIN_Z );
 
   if ( !accelZerod ) {
     if ( millis() >= accelNextUpdate ) {
@@ -69,9 +73,9 @@ void accel_loop() {
       accelZ = gz;
       
       if ( accelZeroCount >= ACCEL_ZERO_ITERS ) {
-        float zeroXTotal = 0.0;
-        float zeroYTotal = 0.0;
-        float zeroZTotal = 0.0;
+        int zeroXTotal = 0;
+        int zeroYTotal = 0;
+        int zeroZTotal = 0;
         
         for ( int i = 0; i < ACCEL_ZERO_ITERS; i++ ) {
           zeroXTotal += accelZeroXValues[i];

@@ -59,6 +59,10 @@ void gyro_setup() {
     while (1);
   }
   
+  gyro_reset();
+}
+
+void gyro_reset() {
   zeroCount = 0;
   zerod = false;
   
