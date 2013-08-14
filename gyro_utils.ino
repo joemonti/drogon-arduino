@@ -47,9 +47,7 @@ float zeroX;
 float zeroY;
 float zeroZ;
 
-float x;
-float y;
-float z;
+float gyroValues[3];
 
 long nextUpdate;
 
@@ -69,6 +67,10 @@ void gyro_reset() {
   maxX = -1;
   maxY = -1;
   maxZ = -1;
+  
+  gyroValues[0] = 0;
+  gyroValues[1] = 0;
+  gyroValues[2] = 0;
   
   nextUpdate = millis();
 }
@@ -92,9 +94,9 @@ void gyro_loop() {
       zeroZValues[zeroCount] = gz;
       zeroCount += 1;
       
-      x = gx;
-      y = gy;
-      z = gz;
+      gyroValues[0] = gx;
+      gyroValues[1] = gy;
+      gyroValues[2] = gz;
       
       if ( zeroCount >= ZERO_ITERS ) {
         float zeroXTotal = 0.0;
@@ -119,9 +121,9 @@ void gyro_loop() {
         //Serial.print("Z");
         //printXYZ( gx, gy, gz, zeroX, zeroY, zeroZ );
         
-        x = zeroX;
-        y = zeroX;
-        z = zeroZ;
+        gyroValues[0] = zeroX;
+        gyroValues[1] = zeroX;
+        gyroValues[2] = zeroZ;
       }
       
       nextUpdate = millis() + ZERO_DELAY;
@@ -135,13 +137,18 @@ void gyro_loop() {
     gy -= zeroY;
     gz -= zeroZ;
     
-    x = gx + FILTER_ALPHA * ( x - gx );
-    y = gy + FILTER_ALPHA * ( y - gy );
-    z = gz + FILTER_ALPHA * ( z - gz );
+    gyroValues[0] = gx + FILTER_ALPHA * ( gyroValues[0] - gx );
+    gyroValues[1] = gy + FILTER_ALPHA * ( gyroValues[1] - gy );
+    gyroValues[2] = gz + FILTER_ALPHA * ( gyroValues[2] - gz );
   }
 }
 
 boolean gyro_ready( ) {
   return zerod;
+}
+
+
+float gyro_get( int idx ) {
+  return gyroValues[idx];
 }
 

@@ -26,7 +26,7 @@ const int MAX_IN_PULSE_WIDTH = 2250;
 const int SYNC_GAP_LEN = 3000;
 const int INITIALIZE_CYCLES = 10;
 
-const long ZEROING_TIME = 1000 * 1000 * 5;
+const long ZEROING_TIME = 1000 * 1000 * 2;
 const float ZERO_BUFFER = 0.005;
 
 const int MAX_GAP = 1920;
@@ -63,11 +63,11 @@ void receiver_setup( ) {
     pulsesMaxZero[i] = -1;
   }
   
-  attachInterrupt( RECEIVER_PIN, receiver_interrupt, RISING);
+  attachInterrupt( RECEIVER_PIN, receiver_interrupt, RISING );
 }
 
 boolean receiver_ready() {
-  return receiverState == RECEIVER_STATE_READY;
+  return receiverState == RECEIVER_STATE_READY || ( zeroed && receiverState == RECEIVER_STATE_INITIALIZING );
 }
 
 void receiver_interrupt( ) {
@@ -92,7 +92,7 @@ void receiver_interrupt( ) {
             pulsesMinZero[i] = pulsesTmp[i];
           }
           if ( pulsesMaxZero[i] == -1 || pulsesTmp[i] > pulsesMaxZero[i] ) {
-            pulsesMaxZero[i] = pulses[i];
+            pulsesMaxZero[i] = pulsesTmp[i];
           }
         }
         
@@ -107,6 +107,8 @@ void receiver_interrupt( ) {
             pulsesMin[i] = cent - range;
             pulsesMax[i] = cent + range;
             pulsesCentValue[i] = map( cent, pulsesMin[i], pulsesMax[i], 0, 200 );
+            
+            zeroed = true;
           }
         }
       }
@@ -143,7 +145,7 @@ int receiver_get_state() {
 }
 
 int receiver_get_value( int c ) {
-  if ( receiverState == RECEIVER_STATE_READY ) {
+  if ( receiver_ready() ) {
     int pulse = pulses[c];
     if ( pulse >= pulsesMinZero[c] && pulse <= pulsesMaxZero[c] ) {
       return 0;
@@ -157,9 +159,13 @@ int receiver_get_value( int c ) {
 }
 
 int receiver_get_pulse( int c ) {
-  if ( receiverState == RECEIVER_STATE_READY ) {
+  if ( receiver_ready() ) {
     return pulses[c];
   } else {
     return -1;
   }
+}
+
+int receiver_get_pulse_raw( int c ) {
+  return pulsesTmp[c];
 }
