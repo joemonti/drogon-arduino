@@ -31,10 +31,10 @@ const int MOTOR_PIN3 = 11;
 
 const int RECEIVER_PIN = 44;
 
-//const int MOTOR_LED_PIN0 = 8;
-//const int MOTOR_LED_PIN1 = 9;
-//const int MOTOR_LED_PIN2 = 10;
-//const int MOTOR_LED_PIN3 = 11;
+const int MOTOR_LED_PIN0 = 46;
+const int MOTOR_LED_PIN1 = 48;
+const int MOTOR_LED_PIN2 = 50;
+const int MOTOR_LED_PIN3 = 52;
 
 const int READY_LED_PIN = 13;
 const int ARMED_LED_PIN = 12;
@@ -46,7 +46,9 @@ const int ACCEL_PIN_Z = 2;
 //const int IR_PIN = 3;
 
 const int MIN_MOTOR_VALUE = 1000;
-const int MAX_MOTOR_VALUE = 2000;
+const int MAX_MOTOR_VALUE = 1500; //2000;
+const int MOTOR_VALUE_RANGE = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) / 2;
+const float MOTOR_DIFF_SCALE = 0.1;
 
 const long STATE_BUFFER_TIME = 500;
 const long STATE_BUFFER_TIME_ARMED = 2000;
@@ -78,7 +80,10 @@ int receiverArmingState;
 long receiverArmingEnding;
 long receiverArmingCooldown;
 
-const long LOG_FREQUENCY = 500;
+const long CONTROL_LOOP_FREQUENCY = 10;
+long nextControlLoop;
+
+const long LOG_FREQUENCY = 200;
 long nextLogTime;
 
 void setup() {
@@ -91,18 +96,18 @@ void setup() {
   motor2.attach( MOTOR_PIN2 );
   motor3.attach( MOTOR_PIN3 );
   
-  //pinMode( MOTOR_LED_PIN0, OUTPUT );
-  ///pinMode( MOTOR_LED_PIN1, OUTPUT );
-  //pinMode( MOTOR_LED_PIN2, OUTPUT );
-  //pinMode( MOTOR_LED_PIN3, OUTPUT );
+  pinMode( MOTOR_LED_PIN0, OUTPUT );
+  pinMode( MOTOR_LED_PIN1, OUTPUT );
+  pinMode( MOTOR_LED_PIN2, OUTPUT );
+  pinMode( MOTOR_LED_PIN3, OUTPUT );
   
   pinMode( READY_LED_PIN, OUTPUT );
   pinMode( ARMED_LED_PIN, OUTPUT );
   
-  //digitalWrite( MOTOR_LED_PIN0, LOW );
-  //digitalWrite( MOTOR_LED_PIN1, LOW );
-  //digitalWrite( MOTOR_LED_PIN2, LOW );
-  //digitalWrite( MOTOR_LED_PIN3, LOW );
+  digitalWrite( MOTOR_LED_PIN0, LOW );
+  digitalWrite( MOTOR_LED_PIN1, LOW );
+  digitalWrite( MOTOR_LED_PIN2, LOW );
+  digitalWrite( MOTOR_LED_PIN3, LOW );
   
   digitalWrite( READY_LED_PIN, LOW );
   digitalWrite( ARMED_LED_PIN, LOW );
@@ -114,10 +119,11 @@ void setup() {
   
   receiver_setup();
   
-  //led_setup( MOTOR_LED_PIN0,
-  //           MOTOR_LED_PIN1,
-  //           MOTOR_LED_PIN2,
-  //           MOTOR_LED_PIN3 );
+  led_setup( MOTOR_LED_PIN0,
+             MOTOR_LED_PIN1,
+             MOTOR_LED_PIN2,
+             MOTOR_LED_PIN3 );
+  
   accel_setup();
   gyro_setup();
   
@@ -129,6 +135,7 @@ void setup() {
   receiverArmingEnding = millis();
   receiverArmingCooldown = millis();
   nextLogTime = millis();
+  nextControlLoop = millis();
   
   if (DEBUG) Serial.println("SETUP FINISHED");
   if (DEBUG) Serial.println("STATE : PENDING");
@@ -247,21 +254,49 @@ void loop() {
 }
 
 void control_loop() {
-  map_reciever();
-  update_motors();
-  
+  if ( millis() > nextControlLoop ) {
+    map_reciever();
+    update_motors();
+    nextControlLoop = millis() + CONTROL_LOOP_FREQUENCY;
+  }
 }
 
 void map_reciever() {
+  int receiver0 = receiver_get_value(0);
+  int receiver1 = receiver_get_value(1);
+  int receiver2 = receiver_get_value(2);
+  
+  int target = max( 0, map( -receiver2, 0, 100, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
+  
+  int motorValue0Adj = 
+             ( map( receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
+               map( receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
+  
+  int motorValue1Adj = 
+             ( map(  receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
+               map( -receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
+  
+  int motorValue2Adj = 
+             ( map( -receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
+               map( -receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
+  
+  int motorValue3Adj = 
+             ( map( -receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
+               map(  receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
+  
+  motorValue0 = max( min( target + motorValue0Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValue1 = max( min( target + motorValue1Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValue2 = max( min( target + motorValue2Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValue3 = max( min( target + motorValue3Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
 }
 
 void update_motors() {
-  //motor0.writeMicroseconds( motorValue0 );
-  //motor1.writeMicroseconds( motorValue1 );
-  //motor2.writeMicroseconds( motorValue2 );
-  //motor3.writeMicroseconds( motorValue3 );
+  motor0.writeMicroseconds( motorValue0 );
+  motor1.writeMicroseconds( motorValue1 );
+  motor2.writeMicroseconds( motorValue2 );
+  motor3.writeMicroseconds( motorValue3 );
   
-  //led_blink( motorValue0, motorValue1, motorValue2, motorValue3 );
+  led_blink( motorValue0, motorValue1, motorValue2, motorValue3 );
 }
 
 void zero_motors() {
@@ -304,6 +339,15 @@ void log_data() {
   Serial.print(gyro_get(1));
   Serial.print('\t');
   Serial.print(gyro_get(2));
+  
+  Serial.print('\t');
+  Serial.print(motorValue0);
+  Serial.print('\t');
+  Serial.print(motorValue1);
+  Serial.print('\t');
+  Serial.print(motorValue2);
+  Serial.print('\t');
+  Serial.print(motorValue3);
   
   Serial.println();
   

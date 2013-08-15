@@ -33,15 +33,20 @@ void led_setup( int motorLedPin0,
                 int motorLedPin1,
                 int motorLedPin2,
                 int motorLedPin3 ) {
-  for ( int i = 0; i < NUM_LEDS; i++ ) {
-    lastLed[i] = LOW;
-    nextLedMillis[i] = millis();
-  }
-  
   ledPin[0] = motorLedPin0;
   ledPin[1] = motorLedPin1;
   ledPin[2] = motorLedPin2;
   ledPin[3] = motorLedPin3;
+  
+  led_reset();
+}
+
+void led_reset( ) {
+  for ( int i = 0; i < NUM_LEDS; i++ ) {
+    digitalWrite( ledPin[i], LOW );
+    lastLed[i] = LOW;
+    nextLedMillis[i] = millis();
+  }
 }
 
 void led_blink( int value1, int value2, int value3, int value4 ) {
@@ -52,11 +57,19 @@ void led_blink( int value1, int value2, int value3, int value4 ) {
 }
 
 void led_blink_led( int index, int value ) {
-  if ( millis() >= nextLedMillis[index] ) {
+  if ( value == MIN_MOTOR_VALUE ) {
+    if ( lastLed[index] != LOW ) {
+      lastLed[index] = LOW;
+      digitalWrite( ledPin[index], LOW );
+    }
+  } else if ( millis() >= nextLedMillis[index] ) {
     lastLed[index] = !lastLed[index];
     digitalWrite( ledPin[index], lastLed[index] );
     
-    nextLedMillis[index] = millis() + ( map( MAX_MOTOR_VALUE-value, 0, MAX_MOTOR_VALUE, LED_MIN_DELAY, LED_MAX_DELAY ) ) ;
+    nextLedMillis[index] = millis() + 
+                             map( MAX_MOTOR_VALUE-value, 
+                                  MIN_MOTOR_VALUE, MAX_MOTOR_VALUE, 
+                                  LED_MIN_DELAY, LED_MAX_DELAY );
   }
 }
 
