@@ -184,12 +184,8 @@ void loop() {
       control_loop();
     }
   } else if ( state == STATE_PENDING ) {
-    if ( !accel_ready() ) {
-      accel_update();
-    }
-    if ( !gyro_ready() ) {
-      gyro_update();
-    }
+    accel_update();
+    gyro_update();
     if ( receiver_ready() && gyro_ready() && accel_ready() ) {
       state = STATE_READY;
       digitalWrite( READY_LED_PIN, HIGH );

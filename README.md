@@ -9,6 +9,13 @@ Sketchbook directory and rename cloned directory from 'drogon-arduino'
 to simply 'drogon'. You will then be able to open the sketch from your
 sketchbook.
 
+
+Dependencies
+---------------------
+
+* https://github.com/adafruit/Adafruit_L3GD20 -- For Adafruit 3-axis Gyroscope
+
+
 Important
 ---------------------
 

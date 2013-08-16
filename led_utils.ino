@@ -68,7 +68,7 @@ void led_blink_led( int index, int value ) {
     
     nextLedMillis[index] = millis() + 
                              map( MAX_MOTOR_VALUE-value, 
-                                  MIN_MOTOR_VALUE, MAX_MOTOR_VALUE, 
+                                  0, MAX_MOTOR_VALUE-MIN_MOTOR_VALUE, 
                                   LED_MIN_DELAY, LED_MAX_DELAY );
   }
 }
