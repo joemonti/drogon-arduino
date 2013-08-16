@@ -37,17 +37,15 @@ int accelZeroX;
 int accelZeroY;
 int accelZeroZ;
 
-int accel[3];
-
 long accelNextUpdate;
 
 void accel_reset() {
   accelZeroCount = 0;
   accelZerod = false;
   
-  accel[0] = 0;
-  accel[1] = 0;
-  accel[2] = 0;  
+  accelValues[0] = 0;
+  accelValues[1] = 0;
+  accelValues[2] = 0;  
   
   accelNextUpdate = millis();
 }
@@ -58,7 +56,7 @@ void accel_setup() {
   accel_reset();
 }
 
-void accel_loop() {
+void accel_update() {
   int gx = analogRead( ACCEL_PIN_X );
   int gy = analogRead( ACCEL_PIN_Y );
   int gz = analogRead( ACCEL_PIN_Z );
@@ -70,9 +68,9 @@ void accel_loop() {
       accelZeroZValues[accelZeroCount] = gz;
       accelZeroCount += 1;
       
-      accel[0] = gx;
-      accel[1] = gy;
-      accel[2] = gz;
+      accelValues[0] = gx;
+      accelValues[1] = gy;
+      accelValues[2] = gz;
       
       if ( accelZeroCount >= ACCEL_ZERO_ITERS ) {
         int zeroXTotal = 0;
@@ -93,9 +91,9 @@ void accel_loop() {
         //Serial.print("Z");
         //printXYZ( gx, gy, gz, zeroX, zeroY, zeroZ );
         
-        accel[0] = accelZeroX;
-        accel[1] = accelZeroX;
-        accel[2] = accelZeroZ;
+        accelValues[0] = accelZeroX;
+        accelValues[1] = accelZeroX;
+        accelValues[2] = accelZeroZ;
       }
       
       accelNextUpdate = millis() + ACCEL_ZERO_DELAY;
@@ -105,17 +103,13 @@ void accel_loop() {
     gy -= accelZeroY;
     gz -= accelZeroZ;
     
-    accel[0] = gx + ACCEL_FILTER_ALPHA * ( accel[0] - gx );
-    accel[1] = gy + ACCEL_FILTER_ALPHA * ( accel[1] - gy );
-    accel[2] = gz + ACCEL_FILTER_ALPHA * ( accel[2] - gz );
+    accelValues[0] = gx + ACCEL_FILTER_ALPHA * ( accelValues[0] - gx );
+    accelValues[1] = gy + ACCEL_FILTER_ALPHA * ( accelValues[1] - gy );
+    accelValues[2] = gz + ACCEL_FILTER_ALPHA * ( accelValues[2] - gz );
   }
 }
 
 boolean accel_ready( ) {
   return accelZerod;
-}
-
-int accel_get( int idx ) {
-  return accel[idx];
 }
 

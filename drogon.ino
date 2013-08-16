@@ -64,10 +64,9 @@ Servo motor1;
 Servo motor2;
 Servo motor3;
 
-int motorValue0;
-int motorValue1;
-int motorValue2;
-int motorValue3;
+int accelValues[3];
+float gyroValues[3];
+int motorValues[4];
 
 long stateBufferExpires;
 
@@ -80,9 +79,6 @@ int receiverArmingState;
 long receiverArmingEnding;
 long receiverArmingCooldown;
 
-const long CONTROL_LOOP_FREQUENCY = 10;
-long nextControlLoop;
-
 const long LOG_FREQUENCY = 200;
 long nextLogTime;
 
@@ -90,11 +86,6 @@ void setup() {
   Serial1.begin(9600);
   
   if (DEBUG) Serial1.println("SETUP STARTED");
-  
-  motor0.attach( MOTOR_PIN0 );
-  motor1.attach( MOTOR_PIN1 );
-  motor2.attach( MOTOR_PIN2 );
-  motor3.attach( MOTOR_PIN3 );
   
   pinMode( MOTOR_LED_PIN0, OUTPUT );
   pinMode( MOTOR_LED_PIN1, OUTPUT );
@@ -112,10 +103,6 @@ void setup() {
   digitalWrite( READY_LED_PIN, LOW );
   digitalWrite( ARMED_LED_PIN, LOW );
   
-  motorValue0 = MIN_MOTOR_VALUE;
-  motorValue1 = MIN_MOTOR_VALUE;
-  motorValue2 = MIN_MOTOR_VALUE;
-  motorValue3 = MIN_MOTOR_VALUE;
   
   receiver_setup();
   
@@ -126,6 +113,8 @@ void setup() {
   
   accel_setup();
   gyro_setup();
+
+  control_setup();
   
   state = STATE_PENDING;
   
@@ -135,21 +124,72 @@ void setup() {
   receiverArmingEnding = millis();
   receiverArmingCooldown = millis();
   nextLogTime = millis();
-  nextControlLoop = millis();
   
   if (DEBUG) Serial1.println("SETUP FINISHED");
   if (DEBUG) Serial1.println("STATE : PENDING");
 }
 
 void loop() {
-  accel_loop();
-  gyro_loop();
-  
   log_data();
   
   if ( millis() < stateBufferExpires ) return;
   
-  if ( state == STATE_PENDING ) {
+  if ( state == STATE_ARMED ) {
+    if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
+      if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
+        if ( DEBUG ) Serial1.println("DISARMING COOLDOWN BOUNCING");
+        receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
+      } else if ( millis() >= receiverArmingEnding ) {
+        state = STATE_READY;
+        stateBufferExpires = millis() + STATE_BUFFER_TIME;
+        
+        receiverArmingState = RECEIVER_ARMING_IDLE;
+        
+        if ( DEBUG ) Serial1.println("DISARMING FINISHED");
+        if ( DEBUG ) Serial1.println("STATE : READY");
+      }
+    } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
+      if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
+        if ( millis() >= receiverArmingEnding ) {
+          receiverArmingState = RECEIVER_ARMING_COOLDOWN;
+          receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
+          if ( DEBUG ) Serial1.println("DISARMING COOLDOWN");
+          
+          // disarming has started, shut down while waiting for cooldown
+          disarm_motors();
+        } else {
+          if ( DEBUG ) Serial1.println("DISARMING PENDING CANCELLED");
+          receiverArmingState = RECEIVER_ARMING_IDLE;
+          
+          // disarming cancelled, continue control loop
+          control_loop();
+        }
+      } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
+        if ( millis() < receiverArmingEnding ) {
+          if ( DEBUG ) Serial1.println("DISARMING PENDING CANCELLED");
+          receiverArmingState = RECEIVER_ARMING_IDLE;
+          
+          // disarming cancelled, continue control loop
+          control_loop();
+        }
+      }
+    } else {
+      if ( receiver_get_value( 4 ) >= 80 && receiver_get_value( 5 ) >= 80 ) {
+        receiverArmingState = RECEIVER_ARMING_PENDING;
+        receiverArmingEnding = millis() + RECEIVER_ARMING_TIME;
+        
+        if ( DEBUG ) Serial1.println("DISARMING START");
+      }
+      
+      control_loop();
+    }
+  } else if ( state == STATE_PENDING ) {
+    if ( !accel_ready() ) {
+      accel_update();
+    }
+    if ( !gyro_ready() ) {
+      gyro_update();
+    }
     if ( receiver_ready() && gyro_ready() && accel_ready() ) {
       state = STATE_READY;
       digitalWrite( READY_LED_PIN, HIGH );
@@ -164,12 +204,11 @@ void loop() {
         receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
       } else if ( millis() >= receiverArmingEnding ) {
         state = STATE_ARMED;
-        digitalWrite( ARMED_LED_PIN, HIGH );
         stateBufferExpires = millis() + STATE_BUFFER_TIME_ARMED;
         
         receiverArmingState = RECEIVER_ARMING_IDLE;
-          
-        zero_motors();
+        
+        arm_motors();
         if ( DEBUG ) Serial1.println("ARMING FINISHED");
         if ( DEBUG ) Serial1.println("STATE : ARMED");
       }
@@ -197,113 +236,49 @@ void loop() {
         if ( DEBUG ) Serial1.println("ARMING START");
       }
     }
-  } else if ( state == STATE_ARMED ) {
-    if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
-      if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
-        if ( DEBUG ) Serial1.println("DISARMING COOLDOWN BOUNCING");
-        receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-      } else if ( millis() >= receiverArmingEnding ) {
-        state = STATE_READY;
-        digitalWrite( ARMED_LED_PIN, LOW );
-        stateBufferExpires = millis() + STATE_BUFFER_TIME;
-        
-        receiverArmingState = RECEIVER_ARMING_IDLE;
-        
-        zero_motors();
-        
-        if ( DEBUG ) Serial1.println("DISARMING FINISHED");
-        if ( DEBUG ) Serial1.println("STATE : READY");
-      }
-    } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
-      if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
-        if ( millis() >= receiverArmingEnding ) {
-          receiverArmingState = RECEIVER_ARMING_COOLDOWN;
-          receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-          if ( DEBUG ) Serial1.println("DISARMING COOLDOWN");
-          
-          // disarming has started, shut down while waiting for cooldown
-          digitalWrite( ARMED_LED_PIN, LOW );
-          zero_motors();
-        } else {
-          if ( DEBUG ) Serial1.println("DISARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-          
-          // disarming cancelled, continue control loop
-          control_loop();
-        }
-      } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
-        if ( millis() < receiverArmingEnding ) {
-          if ( DEBUG ) Serial1.println("DISARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-          
-          // disarming cancelled, continue control loop
-          control_loop();
-        }
-      }
-    } else {
-      if ( receiver_get_value( 4 ) >= 80 && receiver_get_value( 5 ) >= 80 ) {
-        receiverArmingState = RECEIVER_ARMING_PENDING;
-        receiverArmingEnding = millis() + RECEIVER_ARMING_TIME;
-        
-        if ( DEBUG ) Serial1.println("DISARMING START");
-      }
-      
-      control_loop();
-    }
   }
 }
 
 void control_loop() {
-  if ( millis() > nextControlLoop ) {
-    map_reciever();
+  if ( control_update() ) {
     update_motors();
-    nextControlLoop = millis() + CONTROL_LOOP_FREQUENCY;
   }
 }
 
-void map_reciever() {
-  int receiver0 = receiver_get_value(0);
-  int receiver1 = receiver_get_value(1);
-  int receiver2 = receiver_get_value(2);
+void arm_motors() {
+  motor0.attach( MOTOR_PIN0 );
+  motor1.attach( MOTOR_PIN1 );
+  motor2.attach( MOTOR_PIN2 );
+  motor3.attach( MOTOR_PIN3 );
   
-  int target = max( 0, map( -receiver2, 0, 100, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
-  
-  int motorValue0Adj = 
-             ( map( receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
-               map( receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
-  
-  int motorValue1Adj = 
-             ( map(  receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
-               map( -receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
-  
-  int motorValue2Adj = 
-             ( map( -receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
-               map( -receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
-  
-  int motorValue3Adj = 
-             ( map( -receiver1 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) + 
-               map(  receiver0 * MOTOR_DIFF_SCALE, -100, 100, -MOTOR_VALUE_RANGE, MOTOR_VALUE_RANGE ) );
-  
-  motorValue0 = max( min( target + motorValue0Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
-  motorValue1 = max( min( target + motorValue1Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
-  motorValue2 = max( min( target + motorValue2Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
-  motorValue3 = max( min( target + motorValue3Adj, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  digitalWrite( ARMED_LED_PIN, HIGH );
+  zero_motors();
 }
 
-void update_motors() {
-  motor0.writeMicroseconds( motorValue0 );
-  motor1.writeMicroseconds( motorValue1 );
-  motor2.writeMicroseconds( motorValue2 );
-  motor3.writeMicroseconds( motorValue3 );
+void disarm_motors() {
+  digitalWrite( ARMED_LED_PIN, LOW );
+  zero_motors();
   
-  led_blink( motorValue0, motorValue1, motorValue2, motorValue3 );
+  delay( 1000 );
+
+  motor0.detach( );
+  motor1.detach( );
+  motor2.detach( );
+  motor3.detach( );
+}
+
+
+void update_motors() {
+  motor0.writeMicroseconds( motorValues[0] );
+  motor1.writeMicroseconds( motorValues[1] );
+  motor2.writeMicroseconds( motorValues[2] );
+  motor3.writeMicroseconds( motorValues[3] );
+  
+  led_blink( motorValues );
 }
 
 void zero_motors() {
-  motorValue0 = MIN_MOTOR_VALUE;
-  motorValue1 = MIN_MOTOR_VALUE;
-  motorValue2 = MIN_MOTOR_VALUE;
-  motorValue3 = MIN_MOTOR_VALUE;
+  zero_motor_values();
   
   update_motors();
 }
@@ -327,27 +302,27 @@ void log_data() {
   Serial1.print(receiver_get_value(5));
   
   Serial1.print('\t');
-  Serial1.print(accel_get(0));
+  Serial1.print(accelValues[0]);
   Serial1.print('\t');
-  Serial1.print(accel_get(1));
+  Serial1.print(accelValues[1]);
   Serial1.print('\t');
-  Serial1.print(accel_get(2));
+  Serial1.print(accelValues[2]);
   
   Serial1.print('\t');
-  Serial1.print(gyro_get(0));
+  Serial1.print(gyroValues[0]);
   Serial1.print('\t');
-  Serial1.print(gyro_get(1));
+  Serial1.print(gyroValues[1]);
   Serial1.print('\t');
-  Serial1.print(gyro_get(2));
+  Serial1.print(gyroValues[2]);
   
   Serial1.print('\t');
-  Serial1.print(motorValue0);
+  Serial1.print(motorValues[0]);
   Serial1.print('\t');
-  Serial1.print(motorValue1);
+  Serial1.print(motorValues[1]);
   Serial1.print('\t');
-  Serial1.print(motorValue2);
+  Serial1.print(motorValues[2]);
   Serial1.print('\t');
-  Serial1.print(motorValue3);
+  Serial1.print(motorValues[3]);
   
   Serial1.println();
   

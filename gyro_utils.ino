@@ -47,8 +47,6 @@ float zeroX;
 float zeroY;
 float zeroZ;
 
-float gyroValues[3];
-
 long nextUpdate;
 
 void gyro_setup() {
@@ -75,7 +73,7 @@ void gyro_reset() {
   nextUpdate = millis();
 }
 
-void gyro_loop() {
+void gyro_update() {
   // put your main code here, to run repeatedly: 
   gyro.read();
   
@@ -145,10 +143,5 @@ void gyro_loop() {
 
 boolean gyro_ready( ) {
   return zerod;
-}
-
-
-float gyro_get( int idx ) {
-  return gyroValues[idx];
 }
 

@@ -49,11 +49,11 @@ void led_reset( ) {
   }
 }
 
-void led_blink( int value1, int value2, int value3, int value4 ) {
-  led_blink_led( 0, value1 );
-  led_blink_led( 1, value2 );
-  led_blink_led( 2, value3 );
-  led_blink_led( 3, value4 );
+void led_blink( int values[] ) {
+  led_blink_led( 0, values[0] );
+  led_blink_led( 1, values[1] );
+  led_blink_led( 2, values[2] );
+  led_blink_led( 3, values[3] );
 }
 
 void led_blink_led( int index, int value ) {
