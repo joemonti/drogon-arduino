@@ -106,7 +106,7 @@ void receiver_interrupt( ) {
             int range = min( MAX_GAP - cent, cent - MIN_GAP );
             pulsesMin[i] = cent - range;
             pulsesMax[i] = cent + range;
-            pulsesCentValue[i] = map( cent, pulsesMin[i], pulsesMax[i], 0, 200 );
+            pulsesCentValue[i] = map( cent, pulsesMin[i], pulsesMax[i], 0, 2000 );
             
             zeroed = true;
           }
@@ -144,15 +144,15 @@ int receiver_get_state() {
   return receiverState;
 }
 
-int receiver_get_value( int c ) {
+double receiver_get_value( int c ) {
   if ( receiver_ready() ) {
     int pulse = pulses[c];
     if ( pulse >= pulsesMinZero[c] && pulse <= pulsesMaxZero[c] ) {
-      return 0;
+      return 0.0;
     }
-    int value = map( pulse, pulsesMin[c], pulsesMax[c], 0, 200 ) - 
+    int value = map( pulse, pulsesMin[c], pulsesMax[c], 0, 2000 ) - 
                     pulsesCentValue[c];
-    return max( -100, min( value, 100 ) );
+    return max( -1000, min( value, 1000 ) ) / 10.0;
   } else {
     return -1;
   }

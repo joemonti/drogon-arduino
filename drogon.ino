@@ -45,6 +45,11 @@ const int ACCEL_PIN_Z = 2;
 
 //const int IR_PIN = 3;
 
+
+const int X = 0;
+const int Y = 1;
+const int Z = 2;
+
 const int MIN_MOTOR_VALUE = 1000;
 const int MAX_MOTOR_VALUE = 2000; //2000;
 const int MOTOR_VALUE_RANGE = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) / 2;
@@ -65,12 +70,18 @@ Servo motor2;
 Servo motor3;
 
 int accelValues[3];
-float gyroValues[3];
+double gyroValues[3];
 int motorValues[4];
+double motorAdjusts[4];
+
+
+double errX;
+double errY;
 
 long stateBufferExpires;
 
 const long RECEIVER_ARMING_TIME = 3000;
+const long RECEIVER_DISARMING_TIME = 500;
 const long RECEIVER_ARMING_COOLDOWN_TIME = 1000;
 const int RECEIVER_ARMING_IDLE = 0;
 const int RECEIVER_ARMING_PENDING = 1;
@@ -79,7 +90,7 @@ int receiverArmingState;
 long receiverArmingEnding;
 long receiverArmingCooldown;
 
-const long LOG_FREQUENCY = 200;
+const long LOG_FREQUENCY = 100;
 long nextLogTime;
 
 void setup() {
@@ -176,7 +187,7 @@ void loop() {
     } else {
       if ( receiver_get_value( 4 ) >= 80 && receiver_get_value( 5 ) >= 80 ) {
         receiverArmingState = RECEIVER_ARMING_PENDING;
-        receiverArmingEnding = millis() + RECEIVER_ARMING_TIME;
+        receiverArmingEnding = millis() + RECEIVER_DISARMING_TIME;
         
         if ( DEBUG ) Serial1.println("DISARMING START");
       }
@@ -186,6 +197,11 @@ void loop() {
   } else if ( state == STATE_PENDING ) {
     accel_update();
     gyro_update();
+    
+    if ( gyro_ready() && accel_ready() ) {
+      calc_errs();
+    }
+    
     if ( receiver_ready() && gyro_ready() && accel_ready() ) {
       state = STATE_READY;
       digitalWrite( READY_LED_PIN, HIGH );
@@ -282,6 +298,9 @@ void zero_motors() {
 void log_data() {
   if ( millis() < nextLogTime ) return;
   
+  Serial1.print(millis());
+  Serial1.print('\t');
+  
   Serial1.print(receiver_get_state());
   Serial1.print('\t');
   
@@ -298,18 +317,18 @@ void log_data() {
   Serial1.print(receiver_get_value(5));
   
   Serial1.print('\t');
-  Serial1.print(accelValues[0]);
+  Serial1.print(accelValues[X]);
   Serial1.print('\t');
-  Serial1.print(accelValues[1]);
+  Serial1.print(accelValues[Y]);
   Serial1.print('\t');
-  Serial1.print(accelValues[2]);
+  Serial1.print(accelValues[Z]);
   
   Serial1.print('\t');
-  Serial1.print(gyroValues[0]);
+  Serial1.print(gyroValues[X]);
   Serial1.print('\t');
-  Serial1.print(gyroValues[1]);
+  Serial1.print(gyroValues[Y]);
   Serial1.print('\t');
-  Serial1.print(gyroValues[2]);
+  Serial1.print(gyroValues[Z]);
   
   Serial1.print('\t');
   Serial1.print(motorValues[0]);
@@ -319,6 +338,11 @@ void log_data() {
   Serial1.print(motorValues[2]);
   Serial1.print('\t');
   Serial1.print(motorValues[3]);
+  
+  Serial1.print('\t');
+  Serial1.print(errX);
+  Serial1.print('\t');
+  Serial1.print(errY);
   
   Serial1.println();
   

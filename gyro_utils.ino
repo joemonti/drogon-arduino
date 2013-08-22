@@ -25,32 +25,38 @@
 
 Adafruit_L3GD20 gyro;
 
+const long IDLE_DELAY = 2000;
+
 const int ZERO_ITERS = 500;
 const int ZERO_DELAY = 10; // approx 5 seconds
 
-const float CENTER = 180;
+const float GYRO_MAX = 0xffff * L3GD20_SENSITIVITY_500DPS;
+const float GYRO_CENTER = GYRO_MAX/2;
 
-const float MAX_DEFAULT = 573.43;
-
+const int GYRO_BUFFER = 3000;
 const float FILTER_ALPHA = 0.5;
 
 int zeroCount;
 float zeroXValues[ZERO_ITERS];
 float zeroYValues[ZERO_ITERS];
 float zeroZValues[ZERO_ITERS];
-float maxX;
-float maxY;
-float maxZ;
 boolean zerod;
 
 float zeroX;
 float zeroY;
 float zeroZ;
 
+int gyroBufferIndex;
+double gyroXBuffer[GYRO_BUFFER];
+double gyroYBuffer[GYRO_BUFFER];
+double gyroZBuffer[GYRO_BUFFER];
+
+
 long nextUpdate;
+long lastUpdate;
 
 void gyro_setup() {
-  if (!gyro.begin(gyro.L3DS20_RANGE_250DPS)) {
+  if (!gyro.begin(gyro.L3DS20_RANGE_500DPS)) {
     Serial.println("Oops ... unable to initialize the L3GD20. Check your wiring!");
     while (1);
   }
@@ -62,53 +68,48 @@ void gyro_reset() {
   zeroCount = 0;
   zerod = false;
   
-  maxX = -1;
-  maxY = -1;
-  maxZ = -1;
+  gyroValues[X] = 0.0;
+  gyroValues[Y] = 0.0;
+  gyroValues[Z] = 0.0;
   
-  gyroValues[0] = 0;
-  gyroValues[1] = 0;
-  gyroValues[2] = 0;
+  for ( int i = 0; i < GYRO_BUFFER; i++ ) {
+    gyroXBuffer[i] = 0.0;
+    gyroYBuffer[i] = 0.0;
+    gyroZBuffer[i] = 0.0;
+  }
+  gyroBufferIndex = 0;
   
-  nextUpdate = millis();
+  nextUpdate = millis() + IDLE_DELAY;
 }
 
 void gyro_update() {
   // put your main code here, to run repeatedly: 
   gyro.read();
   
-  float gx = gyro.data.x;
-  float gy = gyro.data.y;
-  float gz = gyro.data.z;
+  double gx = gyro.data.x;
+  double gy = gyro.data.y;
+  double gz = gyro.data.z;
 
   if ( !zerod ) {
     if ( millis() >= nextUpdate ) {
-      if ( gx > CENTER && gx > maxX ) maxX = gx;
-      if ( gy > CENTER && gy > maxY ) maxY = gy;
-      if ( gz > CENTER && gz > maxZ ) maxZ = gz;
-      
       zeroXValues[zeroCount] = gx;
       zeroYValues[zeroCount] = gy;
       zeroZValues[zeroCount] = gz;
       zeroCount += 1;
       
-      gyroValues[0] = gx;
-      gyroValues[1] = gy;
-      gyroValues[2] = gz;
+      gyroValues[X] = gx;
+      gyroValues[Y] = gy;
+      gyroValues[Z] = gz;
       
       if ( zeroCount >= ZERO_ITERS ) {
         float zeroXTotal = 0.0;
         float zeroYTotal = 0.0;
         float zeroZTotal = 0.0;
         
-        if ( maxX < 0 ) maxX = MAX_DEFAULT;
-        if ( maxY < 0 ) maxY = MAX_DEFAULT;
-        if ( maxZ < 0 ) maxZ = MAX_DEFAULT;
-        
         for ( int i = 0; i < ZERO_ITERS; i++ ) {
-          zeroXTotal += zeroXValues[i] > CENTER ? zeroXValues[i] - maxX : zeroXValues[i];
-          zeroYTotal += zeroYValues[i] > CENTER ? zeroYValues[i] - maxY : zeroYValues[i];
-          zeroZTotal += zeroZValues[i] > CENTER ? zeroZValues[i] - maxZ : zeroZValues[i];
+          zeroXTotal += zeroXValues[i] > GYRO_CENTER ? zeroXValues[i] - GYRO_MAX : zeroXValues[i];
+          zeroYTotal += zeroYValues[i] > GYRO_CENTER ? zeroYValues[i] - GYRO_MAX : zeroYValues[i];
+          zeroZTotal += zeroZValues[i] > GYRO_CENTER ? zeroZValues[i] - GYRO_MAX : zeroZValues[i];
         }
         
         zeroX = zeroXTotal / zeroCount;
@@ -118,26 +119,55 @@ void gyro_update() {
         
         //Serial.print("Z");
         //printXYZ( gx, gy, gz, zeroX, zeroY, zeroZ );
+        lastUpdate = micros();
         
-        gyroValues[0] = zeroX;
-        gyroValues[1] = zeroX;
-        gyroValues[2] = zeroZ;
+        gyroValues[X] = 0.0;
+        gyroValues[Y] = 0.0;
+        gyroValues[Z] = 0.0;
       }
       
       nextUpdate = millis() + ZERO_DELAY;
     }
   } else {
-    gx = gx > CENTER ? gx - maxX : gx;
-    gy = gy > CENTER ? gy - maxY : gy;
-    gz = gz > CENTER ? gz - maxZ : gz;
+    if ( gx > GYRO_CENTER ) gx -= GYRO_MAX;
+    if ( gy > GYRO_CENTER ) gy -= GYRO_MAX;
+    if ( gz > GYRO_CENTER ) gz -= GYRO_MAX;
     
     gx -= zeroX;
     gy -= zeroY;
     gz -= zeroZ;
     
-    gyroValues[0] = gx + FILTER_ALPHA * ( gyroValues[0] - gx );
-    gyroValues[1] = gy + FILTER_ALPHA * ( gyroValues[1] - gy );
-    gyroValues[2] = gz + FILTER_ALPHA * ( gyroValues[2] - gz );
+    gyroValues[X] = gx + FILTER_ALPHA * ( gyroValues[X] - gx );
+    gyroValues[Y] = gy + FILTER_ALPHA * ( gyroValues[Y] - gy );
+    gyroValues[Z] = gz + FILTER_ALPHA * ( gyroValues[Z] - gz );
+    
+    /*
+    long m = micros();
+    double elapsedSeconds = ( m - lastUpdate ) / 1000000.0;
+    gx *= elapsedSeconds;
+    gy *= elapsedSeconds;
+    gz *= elapsedSeconds;
+    lastUpdate = m;
+    
+    gyroValues[0] += gx;
+    gyroValues[1] += gy;
+    gyroValues[2] += gz;
+    
+    gyroValues[0] -= gyroXBuffer[gyroBufferIndex];
+    gyroValues[1] -= gyroYBuffer[gyroBufferIndex];
+    gyroValues[2] -= gyroZBuffer[gyroBufferIndex];
+    
+    gyroXBuffer[gyroBufferIndex] = gx;
+    gyroYBuffer[gyroBufferIndex] = gy;
+    gyroZBuffer[gyroBufferIndex] = gz;
+    
+    gyroValues[0] += gyroXBuffer[gyroBufferIndex];
+    gyroValues[1] += gyroYBuffer[gyroBufferIndex];
+    gyroValues[2] += gyroZBuffer[gyroBufferIndex];
+    
+    gyroBufferIndex += 1;
+    if ( gyroBufferIndex >= GYRO_BUFFER ) gyroBufferIndex = 0;
+    */
   }
 }
 
