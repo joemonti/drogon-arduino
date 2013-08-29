@@ -50,6 +50,10 @@ const int X = 0;
 const int Y = 1;
 const int Z = 2;
 
+
+const long IDLE_DELAY = 2000;
+
+
 const int MIN_MOTOR_VALUE = 1000;
 const int MAX_MOTOR_VALUE = 2000; //2000;
 const int MOTOR_VALUE_RANGE = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) / 2;
@@ -74,6 +78,8 @@ double gyroValues[3];
 int motorValues[4];
 double motorAdjusts[4];
 
+double angleX;
+double angleY;
 
 double errX;
 double errY;
@@ -92,6 +98,7 @@ long receiverArmingCooldown;
 
 const long LOG_FREQUENCY = 100;
 long nextLogTime;
+
 
 void setup() {
   Serial1.begin(9600);
@@ -338,6 +345,11 @@ void log_data() {
   Serial1.print(motorValues[2]);
   Serial1.print('\t');
   Serial1.print(motorValues[3]);
+  
+  Serial1.print('\t');
+  Serial1.print(angleX);
+  Serial1.print('\t');
+  Serial1.print(angleY);
   
   Serial1.print('\t');
   Serial1.print(errX);

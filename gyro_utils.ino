@@ -25,8 +25,6 @@
 
 Adafruit_L3GD20 gyro;
 
-const long IDLE_DELAY = 2000;
-
 const int ZERO_ITERS = 500;
 const int ZERO_DELAY = 10; // approx 5 seconds
 
@@ -51,6 +49,9 @@ double gyroXBuffer[GYRO_BUFFER];
 double gyroYBuffer[GYRO_BUFFER];
 double gyroZBuffer[GYRO_BUFFER];
 
+double gyroLastX;
+double gyroLastY;
+double gyroLastZ;
 
 long nextUpdate;
 long lastUpdate;
@@ -121,6 +122,17 @@ void gyro_update() {
         //printXYZ( gx, gy, gz, zeroX, zeroY, zeroZ );
         lastUpdate = micros();
         
+        if ( gx > GYRO_CENTER ) gx -= GYRO_MAX;
+        if ( gy > GYRO_CENTER ) gy -= GYRO_MAX;
+        if ( gz > GYRO_CENTER ) gz -= GYRO_MAX;
+        
+        gx -= zeroX;
+        gy -= zeroY;
+        gz -= zeroZ;
+        
+        gyroLastX = gx;
+        gyroLastY = gy;
+        gyroLastZ = gz;
         gyroValues[X] = 0.0;
         gyroValues[Y] = 0.0;
         gyroValues[Z] = 0.0;
@@ -137,11 +149,12 @@ void gyro_update() {
     gy -= zeroY;
     gz -= zeroZ;
     
+    /*
     gyroValues[X] = gx + FILTER_ALPHA * ( gyroValues[X] - gx );
     gyroValues[Y] = gy + FILTER_ALPHA * ( gyroValues[Y] - gy );
     gyroValues[Z] = gz + FILTER_ALPHA * ( gyroValues[Z] - gz );
+    */
     
-    /*
     long m = micros();
     double elapsedSeconds = ( m - lastUpdate ) / 1000000.0;
     gx *= elapsedSeconds;
@@ -149,10 +162,25 @@ void gyro_update() {
     gz *= elapsedSeconds;
     lastUpdate = m;
     
-    gyroValues[0] += gx;
-    gyroValues[1] += gy;
-    gyroValues[2] += gz;
+    gyroValues[0] = gx;
+    gyroValues[1] = gy;
+    gyroValues[2] = gz;
     
+    /*
+    double gxUpdate = ( gyroLastX + gx ) / 2.0;
+    double gyUpdate = ( gyroLastY + gy ) / 2.0;
+    double gzUpdate = ( gyroLastZ + gz ) / 2.0;
+    
+    gyroValues[0] += gxUpdate;
+    gyroValues[1] += gyUpdate;
+    gyroValues[2] += gzUpdate;
+    
+    gyroLastX = gx;
+    gyroLastY = gy;
+    gyroLastZ = gz;
+    */
+    
+    /*
     gyroValues[0] -= gyroXBuffer[gyroBufferIndex];
     gyroValues[1] -= gyroYBuffer[gyroBufferIndex];
     gyroValues[2] -= gyroZBuffer[gyroBufferIndex];

@@ -23,35 +23,30 @@
 const long CONTROL_LOOP_FREQUENCY = 2;
 long nextControlLoop;
 
-const int NUM_FEATURES = 6;
+const int NUM_FEATURES = 3;
 
 const double THETAS[] = {
-  0.2, 0.002, 0.0004, /* ACCEL: KP KI KD */
-  0.4, 0.004, 0.0008  /* GYRO: KP KI KD */
+  5.0, 0.04, 0.4, /* KP KI KD */
 };
-
-double MAX_ERR = MOTOR_VALUE_RANGE * MOTOR_DIFF_SCALE;
 
 double featuresX[NUM_FEATURES];
 double featuresY[NUM_FEATURES];
 
-const int MAX_ACCEL_TOTAL = 200;
-const int MIN_ACCEL_TOTAL = -MAX_ACCEL_TOTAL;
-const int MAX_GYRO_TOTAL = 200;
-const int MIN_GYRO_TOTAL = -MAX_GYRO_TOTAL;
+const int MAX_ERR_TOTAL = 500;
+const int MIN_ERR_TOTAL = -MAX_ERR_TOTAL;
 
 const double MAX_MOTOR_ADJUST = MOTOR_VALUE_RANGE*.25;
 const double MIN_MOTOR_ADJUST = -MAX_MOTOR_ADJUST;
 
-double accelErrTotalX;
-double accelErrTotalY;
-double gyroErrTotalX;
-double gyroErrTotalY;
+const double aScale = 1/6.2;
 
-double accelErrLastX;
-double accelErrLastY;
-double gyroErrLastX;
-double gyroErrLastY;
+boolean controlStart = false;
+long lastErrUpdate;
+double errTotalX;
+double errTotalY;
+
+double errLastX;
+double errLastY;
 
 const float ARM_LENGTH = 30; // 30cm, almost 1ft
 const double ARM_ANGLE_A = 45.0 * PI / 180.0;
@@ -71,9 +66,8 @@ const double motorOffsetVector[] = {
   };
 
 void control_setup() {
-  nextControlLoop = millis();
-  
   zero_motor_values();
+  controlStart = false;
 }
 
 void zero_motor_values() {
@@ -87,15 +81,18 @@ void zero_motor_values() {
     featuresY[i] = 0.0;
   }
   
-  accelErrTotalX = 0.0;
-  accelErrTotalY = 0.0;
-  gyroErrTotalX = 0.0;
-  gyroErrTotalY = 0.0;
+  nextControlLoop = millis();
   
-  accelErrLastX = 0.0;
-  accelErrLastY = 0.0;
-  gyroErrLastX = 0.0;
-  gyroErrLastY = 0.0;
+  lastErrUpdate = micros();
+  
+  errTotalX = 0.0;
+  errTotalY = 0.0;
+  
+  errLastX = 0.0;
+  errLastY = 0.0;
+  
+  angleX = 0.0;
+  angleY = 0.0;
   
   errX = 0.0;
   errY = 0.0;
@@ -107,9 +104,19 @@ void zero_motor_values() {
 }
 
 boolean control_update() {
-  if ( millis() > nextControlLoop ) {
+  if ( !controlStart ) {
+    zero_motor_values();
+    controlStart = true;
+  } else if ( millis() > nextControlLoop ) {
+    double lastAccelX = accelValues[X];
+    double lastAccelY = accelValues[Y];
+    
     accel_update();
     gyro_update();
+    
+    angleX = (-lastAccelY*aScale) + gyroValues[X];
+    angleY = (lastAccelX*aScale) + gyroValues[Y];
+    
     calc_errs();
     update_motor_values();
     nextControlLoop = millis() + CONTROL_LOOP_FREQUENCY;
@@ -144,8 +151,8 @@ void update_motor_values() {
   */
   
   if ( receiver1 < 0.0 ) {
-    errX *= ( -receiver1 / 10.0 );
-    errY *= ( -receiver1 / 10.0 );
+    errX += ( errorX * -receiver1 / 10.0 );
+    errY += ( errorY * -receiver1 / 10.0 );
   } else if ( receiver1 > 0.0 ) {
     errX /= ( receiver1 / 10.0 );
     errY /= ( receiver1 / 10.0 );
@@ -160,55 +167,36 @@ void update_motor_values() {
 }
 
 void calc_errs() {
-  double accelErrX = -accelValues[Y];
-  double gyroErrX = gyroValues[X];
+  double rawErrX = angleX;
+  double rawErrY = angleY;
   
-  double accelErrY = -accelValues[X];
-  double gyroErrY = -gyroValues[Y];
+  errTotalX += rawErrX;
+  errTotalY += rawErrY;
   
-  accelErrTotalX += accelErrX;
-  gyroErrTotalX += gyroErrX;
+  errTotalX = max( MIN_ERR_TOTAL, min( MAX_ERR_TOTAL, errTotalX ) );
+  errTotalY = max( MIN_ERR_TOTAL, min( MAX_ERR_TOTAL, errTotalY ) );
   
-  accelErrTotalY += accelErrY;
-  gyroErrTotalY += gyroErrY;
+  long t = micros();
+  double elapsed = ( t - lastErrUpdate ) / 1000000.0;
   
-  accelErrTotalX = max( MIN_ACCEL_TOTAL, min( MAX_ACCEL_TOTAL, accelErrTotalX ) );
-  gyroErrTotalX = max( MIN_GYRO_TOTAL, min( MAX_GYRO_TOTAL, gyroErrTotalX ) );
+  double errDiffX = ( rawErrX - errLastX ) / elapsed;
+  double errDiffY = ( rawErrY - errLastY ) / elapsed;
   
-  accelErrTotalY = max( MIN_ACCEL_TOTAL, min( MAX_ACCEL_TOTAL, accelErrTotalY ) );
-  gyroErrTotalY = max( MIN_GYRO_TOTAL, min( MAX_GYRO_TOTAL, gyroErrTotalY ) );
+  featuresX[0] = rawErrX;
+  featuresX[1] = errTotalX;
+  featuresX[2] = errDiffX;
   
-  double accelErrDiffX = accelErrX - accelErrLastX;
-  double gyroErrDiffX = gyroErrX - gyroErrLastX;
-
-  double accelErrDiffY = accelErrY - accelErrLastY;
-  double gyroErrDiffY = gyroErrY - gyroErrLastY;
-  
-  featuresX[0] = accelErrX;
-  featuresX[1] = accelErrTotalX;
-  featuresX[2] = accelErrDiffX;
-  
-  featuresX[3] = gyroErrX;
-  featuresX[4] = gyroErrTotalX;
-  featuresX[5] = gyroErrDiffX;
-
-  
-  featuresY[0] = accelErrY;
-  featuresY[1] = accelErrTotalY;
-  featuresY[2] = accelErrDiffY;
-  
-  featuresY[3] = gyroErrY;
-  featuresY[4] = gyroErrTotalY;
-  featuresY[5] = gyroErrDiffY;
+  featuresY[0] = rawErrY;
+  featuresY[1] = errTotalY;
+  featuresY[2] = errDiffY;
   
   errX = array_mult( featuresX, THETAS, NUM_FEATURES );  
   errY = array_mult( featuresY, THETAS, NUM_FEATURES );
   
-  accelErrLastX = accelErrX;
-  gyroErrLastX = gyroErrX;
+  errLastX = rawErrX;
+  errLastY = rawErrY;
   
-  accelErrLastY = accelErrY;
-  gyroErrLastY = gyroErrY;
+  lastErrUpdate = t;
 }
 
 double array_mult( const double* a, const double* b, int len ) {

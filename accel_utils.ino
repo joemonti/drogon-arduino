@@ -47,7 +47,7 @@ void accel_reset() {
   accelValues[Y] = 0;
   accelValues[Z] = 0;  
   
-  accelNextUpdate = millis();
+  accelNextUpdate = millis() + IDLE_DELAY;
 }
 
 void accel_setup() {
@@ -103,9 +103,9 @@ void accel_update() {
     gy -= accelZeroY;
     gz -= accelZeroZ;
     
-    accelValues[X] = gx + ACCEL_FILTER_ALPHA * ( accelValues[X] - gx );
-    accelValues[Y] = gy + ACCEL_FILTER_ALPHA * ( accelValues[Y] - gy );
-    accelValues[Z] = gz + ACCEL_FILTER_ALPHA * ( accelValues[Z] - gz );
+    accelValues[X] = gx; // + ACCEL_FILTER_ALPHA * ( accelValues[X] - gx );
+    accelValues[Y] = gy; // + ACCEL_FILTER_ALPHA * ( accelValues[Y] - gy );
+    accelValues[Z] = gz; // + ACCEL_FILTER_ALPHA * ( accelValues[Z] - gz );
   }
 }
 
