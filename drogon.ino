@@ -81,8 +81,11 @@ double motorAdjusts[4];
 double angleX;
 double angleY;
 
-double errX;
-double errY;
+double motorOffsetA;
+double motorOffsetB;
+
+double errA;
+double errB;
 
 long stateBufferExpires;
 
@@ -352,9 +355,9 @@ void log_data() {
   Serial1.print(angleY);
   
   Serial1.print('\t');
-  Serial1.print(errX);
+  Serial1.print(errA);
   Serial1.print('\t');
-  Serial1.print(errY);
+  Serial1.print(errB);
   
   Serial1.println();
   
