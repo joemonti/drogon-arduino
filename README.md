@@ -13,6 +13,7 @@ sketchbook.
 Dependencies
 ---------------------
 
+* https://github.com/countjoe/drogon-flight -- Drogon Flight library 
 * https://github.com/adafruit/Adafruit_L3GD20 -- For Adafruit 3-axis Gyroscope
 
 

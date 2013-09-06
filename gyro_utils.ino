@@ -32,7 +32,7 @@ const float GYRO_MAX = 0xffff * L3GD20_SENSITIVITY_500DPS;
 const float GYRO_CENTER = GYRO_MAX/2;
 
 const int GYRO_BUFFER = 3000;
-const float FILTER_ALPHA = 0.5;
+const float FILTER_ALPHA = 0.1;
 
 int zeroCount;
 float zeroXValues[ZERO_ITERS];
@@ -162,9 +162,9 @@ void gyro_update() {
     gz *= elapsedSeconds;
     lastUpdate = m;
     
-    gyroValues[0] = gx;
-    gyroValues[1] = gy;
-    gyroValues[2] = gz;
+    gyroValues[X] = gx; // + FILTER_ALPHA * ( gyroValues[X] - gx );
+    gyroValues[Y] = gy; // + FILTER_ALPHA * ( gyroValues[Y] - gy );
+    gyroValues[Z] = gz; // + FILTER_ALPHA * ( gyroValues[Z] - gz );
     
     /*
     double gxUpdate = ( gyroLastX + gx ) / 2.0;

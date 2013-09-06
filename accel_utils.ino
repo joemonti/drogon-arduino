@@ -25,7 +25,7 @@ const int ANALOG_RESOLUTION = 12;
 const int ACCEL_ZERO_ITERS = 500;
 const int ACCEL_ZERO_DELAY = 10; // approx 5 seconds
 
-const float ACCEL_FILTER_ALPHA = 0.5;
+const float ACCEL_FILTER_ALPHA = 0.8;
 
 int accelZeroCount;
 int accelZeroXValues[ACCEL_ZERO_ITERS];
@@ -33,9 +33,9 @@ int accelZeroYValues[ACCEL_ZERO_ITERS];
 int accelZeroZValues[ACCEL_ZERO_ITERS];
 boolean accelZerod;
 
-int accelZeroX;
-int accelZeroY;
-int accelZeroZ;
+double accelZeroX;
+double accelZeroY;
+double accelZeroZ;
 
 long accelNextUpdate;
 
@@ -83,9 +83,9 @@ void accel_update() {
           zeroZTotal += accelZeroZValues[i];
         }
         
-        accelZeroX = zeroXTotal / accelZeroCount;
-        accelZeroY = zeroYTotal / accelZeroCount;
-        accelZeroZ = zeroZTotal / accelZeroCount;
+        accelZeroX = zeroXTotal / (double) accelZeroCount;
+        accelZeroY = zeroYTotal / (double) accelZeroCount;
+        accelZeroZ = zeroZTotal / (double) accelZeroCount;
         accelZerod = true;
         
         //Serial.print("Z");

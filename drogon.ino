@@ -22,6 +22,9 @@
 
 #include <Servo.h>
 
+#include <DrogonPosition.h>
+#include <DrogonController.h>
+
 const boolean DEBUG = true;
 
 const int MOTOR_PIN0 = 8;
@@ -56,7 +59,8 @@ const long IDLE_DELAY = 2000;
 
 const int MIN_MOTOR_VALUE = 1000;
 const int MAX_MOTOR_VALUE = 2000; //2000;
-const int MOTOR_VALUE_RANGE = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) / 2;
+const float MAX_MOTOR_ADJUST = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.25;
+const float MIN_MOTOR_ADJUST = -MAX_MOTOR_ADJUST;
 const float MOTOR_DIFF_SCALE = 0.1;
 
 const long STATE_BUFFER_TIME = 500;
@@ -73,19 +77,10 @@ Servo motor1;
 Servo motor2;
 Servo motor3;
 
-int accelValues[3];
+double accelValues[3];
 double gyroValues[3];
 int motorValues[4];
 double motorAdjusts[4];
-
-double angleX;
-double angleY;
-
-double motorOffsetA;
-double motorOffsetB;
-
-double errA;
-double errB;
 
 long stateBufferExpires;
 
@@ -102,6 +97,9 @@ long receiverArmingCooldown;
 const long LOG_FREQUENCY = 100;
 long nextLogTime;
 
+DrogonController controller;
+const long CONTROL_FREQUENCY = 5;
+long nextControlTime;
 
 void setup() {
   Serial1.begin(9600);
@@ -134,8 +132,6 @@ void setup() {
   
   accel_setup();
   gyro_setup();
-
-  control_setup();
   
   state = STATE_PENDING;
   
@@ -145,6 +141,7 @@ void setup() {
   receiverArmingEnding = millis();
   receiverArmingCooldown = millis();
   nextLogTime = millis();
+  nextControlTime = millis();
   
   if (DEBUG) Serial1.println("SETUP FINISHED");
   if (DEBUG) Serial1.println("STATE : PENDING");
@@ -208,10 +205,6 @@ void loop() {
     accel_update();
     gyro_update();
     
-    if ( gyro_ready() && accel_ready() ) {
-      calc_errs();
-    }
-    
     if ( receiver_ready() && gyro_ready() && accel_ready() ) {
       state = STATE_READY;
       digitalWrite( READY_LED_PIN, HIGH );
@@ -262,9 +255,57 @@ void loop() {
 }
 
 void control_loop() {
-  if ( control_update() ) {
+  if ( millis() > nextControlTime ) {
+    control_loop_update();
+    
     update_motors();
+    
+    nextControlTime = millis() + CONTROL_FREQUENCY;
   }
+}
+
+void control_loop_update() {
+  long m = micros();
+  
+  accel_update();
+  gyro_update();
+  
+  double receiver0 = receiver_get_value(0);
+  double receiver1 = receiver_get_value(1);
+  double receiver2 = receiver_get_value(2);
+  
+  controller.position.update( m, accelValues, gyroValues );
+  controller.control_update( m );
+  
+  int target = max( 0, map( -receiver2*10, 0, 1000, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
+  
+  motorAdjusts[0] = controller.motorAdjusts[0];
+  motorAdjusts[1] = controller.motorAdjusts[1];
+  motorAdjusts[2] = controller.motorAdjusts[2];
+  motorAdjusts[3] = controller.motorAdjusts[3];
+  
+  // allow error scaling by receiver channel 1
+  if ( receiver1 < 0.0 ) {
+    motorAdjusts[0] += ( motorAdjusts[0] * -receiver1 / 10.0 );
+    motorAdjusts[1] += ( motorAdjusts[1] * -receiver1 / 10.0 );
+    motorAdjusts[2] += ( motorAdjusts[2] * -receiver1 / 10.0 );
+    motorAdjusts[3] += ( motorAdjusts[3] * -receiver1 / 10.0 );
+  } else if ( receiver1 > 0.0 ) {
+    motorAdjusts[0] -= ( motorAdjusts[0] * ( receiver1 / 100.0 ) );
+    motorAdjusts[1] -= ( motorAdjusts[1] * ( receiver1 / 100.0 ) );
+    motorAdjusts[2] -= ( motorAdjusts[2] * ( receiver1 / 100.0 ) );
+    motorAdjusts[3] -= ( motorAdjusts[3] * ( receiver1 / 100.0 ) );
+  }
+  
+  motorAdjusts[0] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[0] ) );
+  motorAdjusts[1] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[1] ) );
+  motorAdjusts[2] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[2] ) );
+  motorAdjusts[3] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[3] ) );
+  
+  motorValues[0] = max( min( target + motorAdjusts[0], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[1] = max( min( target + motorAdjusts[1], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[2] = max( min( target + motorAdjusts[2], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[3] = max( min( target + motorAdjusts[3], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
 }
 
 void arm_motors() {
@@ -300,7 +341,10 @@ void update_motors() {
 }
 
 void zero_motors() {
-  zero_motor_values();
+  motorValues[0] = 0.0;
+  motorValues[1] = 0.0;
+  motorValues[2] = 0.0;
+  motorValues[3] = 0.0;
   
   update_motors();
 }
@@ -341,23 +385,23 @@ void log_data() {
   Serial1.print(gyroValues[Z]);
   
   Serial1.print('\t');
-  Serial1.print(motorValues[0]);
+  Serial1.print(motorAdjusts[0]);
   Serial1.print('\t');
-  Serial1.print(motorValues[1]);
+  Serial1.print(motorAdjusts[1]);
   Serial1.print('\t');
-  Serial1.print(motorValues[2]);
+  Serial1.print(motorAdjusts[2]);
   Serial1.print('\t');
-  Serial1.print(motorValues[3]);
+  Serial1.print(motorAdjusts[3]);
   
   Serial1.print('\t');
-  Serial1.print(angleX);
+  Serial1.print(controller.position.x);
   Serial1.print('\t');
-  Serial1.print(angleY);
+  Serial1.print(controller.position.y);
   
   Serial1.print('\t');
-  Serial1.print(errA);
+  Serial1.print(controller.errA);
   Serial1.print('\t');
-  Serial1.print(errB);
+  Serial1.print(controller.errB);
   
   Serial1.println();
   
