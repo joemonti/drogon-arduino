@@ -97,7 +97,8 @@ long receiverArmingCooldown;
 const long LOG_FREQUENCY = 100;
 long nextLogTime;
 
-DrogonController controller;
+DrogonPosition pos;
+DrogonController controller(&pos);
 const long CONTROL_FREQUENCY = 5;
 long nextControlTime;
 
@@ -213,6 +214,8 @@ void loop() {
       if ( DEBUG ) Serial1.println("STATE : READY");
     }
   } else if ( state == STATE_READY ) {
+    position_loop();
+    
     if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
       if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
         if ( DEBUG ) Serial1.println("ARMING COOLDOWN BOUNCING");
@@ -254,9 +257,24 @@ void loop() {
   }
 }
 
+void position_loop() {
+  if ( millis() > nextControlTime ) {
+    position_update( micros() );
+    
+    nextControlTime = millis() + CONTROL_FREQUENCY;
+  }
+}
+
+void position_update( long m ) {
+  accel_update();
+  gyro_update();
+  
+  pos.update( m, accelValues, gyroValues );
+}
+
 void control_loop() {
   if ( millis() > nextControlTime ) {
-    control_loop_update();
+    control_loop_update( micros() );
     
     update_motors();
     
@@ -264,18 +282,14 @@ void control_loop() {
   }
 }
 
-void control_loop_update() {
-  long m = micros();
+void control_loop_update( long m ) {
+  position_update( m );
   
-  accel_update();
-  gyro_update();
+  controller.control_update( m );
   
   double receiver0 = receiver_get_value(0);
   double receiver1 = receiver_get_value(1);
   double receiver2 = receiver_get_value(2);
-  
-  controller.position.update( m, accelValues, gyroValues );
-  controller.control_update( m );
   
   int target = max( 0, map( -receiver2*10, 0, 1000, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
   
@@ -394,9 +408,9 @@ void log_data() {
   Serial1.print(motorAdjusts[3]);
   
   Serial1.print('\t');
-  Serial1.print(controller.position.x);
+  Serial1.print(pos.x);
   Serial1.print('\t');
-  Serial1.print(controller.position.y);
+  Serial1.print(pos.y);
   
   Serial1.print('\t');
   Serial1.print(controller.errA);
