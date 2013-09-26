@@ -99,7 +99,7 @@ long nextLogTime;
 
 DrogonPosition pos;
 DrogonController controller(&pos);
-const long CONTROL_FREQUENCY = 5;
+const long CONTROL_FREQUENCY = 5000;
 long nextControlTime;
 
 void setup() {
@@ -258,10 +258,14 @@ void loop() {
 }
 
 void position_loop() {
-  if ( millis() > nextControlTime ) {
-    position_update( micros() );
+  long m = micros();
+  
+  if ( m > nextControlTime ) {
+    position_update( m );
     
-    nextControlTime = millis() + CONTROL_FREQUENCY;
+    long finished = micros();
+    long elapsed = finished - m;
+    nextControlTime = finished - elapsed + CONTROL_FREQUENCY;
   }
 }
 
@@ -273,12 +277,15 @@ void position_update( long m ) {
 }
 
 void control_loop() {
-  if ( millis() > nextControlTime ) {
-    control_loop_update( micros() );
+  long m = micros();
+  if ( m > nextControlTime ) {
+    control_loop_update( m );
     
     update_motors();
     
-    nextControlTime = millis() + CONTROL_FREQUENCY;
+    long finished = micros();
+    long elapsed = finished - m;
+    nextControlTime = finished - elapsed + CONTROL_FREQUENCY;
   }
 }
 

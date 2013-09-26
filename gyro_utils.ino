@@ -28,7 +28,7 @@ Adafruit_L3GD20 gyro;
 const int ZERO_ITERS = 500;
 const int ZERO_DELAY = 10; // approx 5 seconds
 
-const float GYRO_MAX = 0xffff * L3GD20_SENSITIVITY_500DPS;
+const float GYRO_MAX = 0xffff * L3GD20_SENSITIVITY_250DPS;
 const float GYRO_CENTER = GYRO_MAX/2;
 
 const int GYRO_BUFFER = 3000;
@@ -57,7 +57,7 @@ long nextUpdate;
 long lastUpdate;
 
 void gyro_setup() {
-  if (!gyro.begin(gyro.L3DS20_RANGE_500DPS)) {
+  if (!gyro.begin(gyro.L3DS20_RANGE_250DPS)) {
     Serial.println("Oops ... unable to initialize the L3GD20. Check your wiring!");
     while (1);
   }
@@ -155,12 +155,14 @@ void gyro_update() {
     gyroValues[Z] = gz + FILTER_ALPHA * ( gyroValues[Z] - gz );
     */
     
+    /*
     long m = micros();
     double elapsedSeconds = ( m - lastUpdate ) / 1000000.0;
     gx *= elapsedSeconds;
     gy *= elapsedSeconds;
     gz *= elapsedSeconds;
     lastUpdate = m;
+    */
     
     gyroValues[X] = gx; // + FILTER_ALPHA * ( gyroValues[X] - gx );
     gyroValues[Y] = gy; // + FILTER_ALPHA * ( gyroValues[Y] - gy );

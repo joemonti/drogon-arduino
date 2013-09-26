@@ -27,7 +27,7 @@ const int ACCEL_ZERO_DELAY = 10; // approx 5 seconds
 
 const float ACCEL_FILTER_ALPHA = 0.8;
 
-const double ACCEL_ZERO_BUFFER = 1.2;
+const double ACCEL_ZERO_BUFFER = 2.5;
 
 int accelZeroCount;
 int accelZeroXValues[ACCEL_ZERO_ITERS];
@@ -105,9 +105,9 @@ void accel_update() {
     double ay = ( gy - accelZeroY );
     double az = ( gz - accelZeroZ );
     
-    if ( abs( ax ) < ACCEL_ZERO_BUFFER ) ax = 0.0;
-    if ( abs( ay ) < ACCEL_ZERO_BUFFER ) ay = 0.0;
-    if ( abs( az ) < ACCEL_ZERO_BUFFER ) az = 0.0;
+    if ( abs( ax ) <= ACCEL_ZERO_BUFFER ) ax = 0.0;
+    if ( abs( ay ) <= ACCEL_ZERO_BUFFER ) ay = 0.0;
+    if ( abs( az ) <= ACCEL_ZERO_BUFFER ) az = 0.0;
     
     accelValues[X] = ax; // + ACCEL_FILTER_ALPHA * ( accelValues[X] - gx );
     accelValues[Y] = ay; // + ACCEL_FILTER_ALPHA * ( accelValues[Y] - gy );
