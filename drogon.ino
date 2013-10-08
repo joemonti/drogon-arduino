@@ -100,7 +100,8 @@ long nextLogTime;
 DrogonPosition pos;
 DrogonController controller(&pos);
 const long CONTROL_FREQUENCY = 5000;
-long nextControlTime;
+unsigned long nextControlTime;
+int lastRunDuration;
 
 void setup() {
   Serial1.begin(9600);
@@ -138,11 +139,12 @@ void setup() {
   
   stateBufferExpires = millis();
   
+  lastRunDuration = 0;
   receiverArmingState = RECEIVER_ARMING_IDLE;
   receiverArmingEnding = millis();
   receiverArmingCooldown = millis();
   nextLogTime = millis();
-  nextControlTime = millis();
+  nextControlTime = micros();
   
   if (DEBUG) Serial1.println("SETUP FINISHED");
   if (DEBUG) Serial1.println("STATE : PENDING");
@@ -260,12 +262,12 @@ void loop() {
 void position_loop() {
   long m = micros();
   
-  if ( m > nextControlTime ) {
+  if ( m >= nextControlTime ) {
     position_update( m );
     
-    long finished = micros();
-    long elapsed = finished - m;
-    nextControlTime = finished - elapsed + CONTROL_FREQUENCY;
+    lastRunDuration = ( micros() - m );
+    
+    nextControlTime = m + CONTROL_FREQUENCY;
   }
 }
 
@@ -277,22 +279,24 @@ void position_update( long m ) {
 }
 
 void control_loop() {
-  long m = micros();
-  if ( m > nextControlTime ) {
+  unsigned long m = micros();
+  if ( m >= nextControlTime ) {
     control_loop_update( m );
     
     update_motors();
     
-    long finished = micros();
-    long elapsed = finished - m;
-    nextControlTime = finished - elapsed + CONTROL_FREQUENCY;
+    lastRunDuration = ( micros() - m );
+    
+    nextControlTime = m + CONTROL_FREQUENCY;
   }
 }
 
-void control_loop_update( long m ) {
+void control_loop_update( unsigned long m ) {
+  double zeroTarget[] = { 0.0, 0.0, 0.0 };
+  
   position_update( m );
   
-  controller.control_update( m );
+  controller.control_update( m, zeroTarget );
   
   double receiver0 = receiver_get_value(0);
   double receiver1 = receiver_get_value(1);
@@ -376,6 +380,9 @@ void log_data() {
   Serial1.print(millis());
   Serial1.print('\t');
   
+  Serial1.print(lastRunDuration);
+  Serial1.print('\t');
+  
   Serial1.print(receiver_get_state());
   Serial1.print('\t');
   
@@ -420,9 +427,9 @@ void log_data() {
   Serial1.print(pos.y);
   
   Serial1.print('\t');
-  Serial1.print(controller.errA);
+  Serial1.print(controller.pidAbsoluteA.error);
   Serial1.print('\t');
-  Serial1.print(controller.errB);
+  Serial1.print(controller.pidAbsoluteB.error);
   
   Serial1.println();
   
