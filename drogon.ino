@@ -97,6 +97,9 @@ long receiverArmingCooldown;
 const long LOG_FREQUENCY = 100;
 long nextLogTime;
 
+const int CONTROL_ENGAGE_THRESHOLD = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1 );
+boolean controlEngaged;
+
 DrogonPosition pos;
 DrogonController controller(&pos);
 const long CONTROL_FREQUENCY = 5000;
@@ -145,6 +148,7 @@ void setup() {
   receiverArmingCooldown = millis();
   nextLogTime = millis();
   nextControlTime = micros();
+  controlEngaged = false;
   
   if (DEBUG) Serial1.println("5\tSETUP FINISHED");
   if (DEBUG) Serial1.println("5\tSTATE : PENDING");
@@ -296,18 +300,42 @@ void control_loop_update( unsigned long m ) {
   
   position_update( m );
   
-  controller.control_update( m, zeroTarget );
-  
   double receiver0 = receiver_get_value(0);
   double receiver1 = receiver_get_value(1);
   double receiver2 = receiver_get_value(2);
   
   int target = max( 0, map( -receiver2*10, 0, 1000, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
   
-  motorAdjusts[0] = controller.motorAdjusts[0];
-  motorAdjusts[1] = controller.motorAdjusts[1];
-  motorAdjusts[2] = controller.motorAdjusts[2];
-  motorAdjusts[3] = controller.motorAdjusts[3];
+  if ( controlEngaged ) {
+    if ( target < CONTROL_ENGAGE_THRESHOLD ) {
+      controller.reset( m );
+      
+      motorAdjusts[0] = 0;
+      motorAdjusts[1] = 0;
+      motorAdjusts[2] = 0;
+      motorAdjusts[3] = 0;
+      
+      controlEngaged = false;
+    } else {
+      controller.control_update( m, zeroTarget );
+      
+      motorAdjusts[0] = controller.motorAdjusts[0];
+      motorAdjusts[1] = controller.motorAdjusts[1];
+      motorAdjusts[2] = controller.motorAdjusts[2];
+      motorAdjusts[3] = controller.motorAdjusts[3];
+    }
+  } else if ( target >= CONTROL_ENGAGE_THRESHOLD ) {
+    controller.reset( m );
+    
+    controller.control_update( m, zeroTarget );
+    
+    motorAdjusts[0] = controller.motorAdjusts[0];
+    motorAdjusts[1] = controller.motorAdjusts[1];
+    motorAdjusts[2] = controller.motorAdjusts[2];
+    motorAdjusts[3] = controller.motorAdjusts[3];
+    
+    controlEngaged = true;
+  }
   
   // allow error scaling by receiver channel 1
   if ( receiver1 < 0.0 ) {
