@@ -144,8 +144,8 @@ void setup() {
   nextLogTime = millis();
   nextControlTime = millis();
   
-  if (DEBUG) Serial1.println("SETUP FINISHED");
-  if (DEBUG) Serial1.println("STATE : PENDING");
+  if (DEBUG) Serial1.println("5\tSETUP FINISHED");
+  if (DEBUG) Serial1.println("5\tSTATE : PENDING");
 }
 
 void loop() {
@@ -156,7 +156,7 @@ void loop() {
   if ( state == STATE_ARMED ) {
     if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
       if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
-        if ( DEBUG ) Serial1.println("DISARMING COOLDOWN BOUNCING");
+        if ( DEBUG ) Serial1.println("5\tDISARMING COOLDOWN BOUNCING");
         receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
       } else if ( millis() >= receiverArmingEnding ) {
         state = STATE_READY;
@@ -164,20 +164,20 @@ void loop() {
         
         receiverArmingState = RECEIVER_ARMING_IDLE;
         
-        if ( DEBUG ) Serial1.println("DISARMING FINISHED");
-        if ( DEBUG ) Serial1.println("STATE : READY");
+        if ( DEBUG ) Serial1.println("5\tDISARMING FINISHED");
+        if ( DEBUG ) Serial1.println("5\tSTATE : READY");
       }
     } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
       if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
         if ( millis() >= receiverArmingEnding ) {
           receiverArmingState = RECEIVER_ARMING_COOLDOWN;
           receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-          if ( DEBUG ) Serial1.println("DISARMING COOLDOWN");
+          if ( DEBUG ) Serial1.println("5\tDISARMING COOLDOWN");
           
           // disarming has started, shut down while waiting for cooldown
           disarm_motors();
         } else {
-          if ( DEBUG ) Serial1.println("DISARMING PENDING CANCELLED");
+          if ( DEBUG ) Serial1.println("5\tDISARMING PENDING CANCELLED");
           receiverArmingState = RECEIVER_ARMING_IDLE;
           
           // disarming cancelled, continue control loop
@@ -185,7 +185,7 @@ void loop() {
         }
       } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
         if ( millis() < receiverArmingEnding ) {
-          if ( DEBUG ) Serial1.println("DISARMING PENDING CANCELLED");
+          if ( DEBUG ) Serial1.println("5\tDISARMING PENDING CANCELLED");
           receiverArmingState = RECEIVER_ARMING_IDLE;
           
           // disarming cancelled, continue control loop
@@ -197,7 +197,7 @@ void loop() {
         receiverArmingState = RECEIVER_ARMING_PENDING;
         receiverArmingEnding = millis() + RECEIVER_DISARMING_TIME;
         
-        if ( DEBUG ) Serial1.println("DISARMING START");
+        if ( DEBUG ) Serial1.println("5\tDISARMING START");
       }
       
       control_loop();
@@ -211,14 +211,14 @@ void loop() {
       digitalWrite( READY_LED_PIN, HIGH );
       stateBufferExpires = millis() + STATE_BUFFER_TIME;
       
-      if ( DEBUG ) Serial1.println("STATE : READY");
+      if ( DEBUG ) Serial1.println("5\tSTATE : READY");
     }
   } else if ( state == STATE_READY ) {
     position_loop();
     
     if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
       if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
-        if ( DEBUG ) Serial1.println("ARMING COOLDOWN BOUNCING");
+        if ( DEBUG ) Serial1.println("5\tARMING COOLDOWN BOUNCING");
         receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
       } else if ( millis() >= receiverArmingEnding ) {
         state = STATE_ARMED;
@@ -227,22 +227,22 @@ void loop() {
         receiverArmingState = RECEIVER_ARMING_IDLE;
         
         arm_motors();
-        if ( DEBUG ) Serial1.println("ARMING FINISHED");
-        if ( DEBUG ) Serial1.println("STATE : ARMED");
+        if ( DEBUG ) Serial1.println("5\tARMING FINISHED");
+        if ( DEBUG ) Serial1.println("5\tSTATE : ARMED");
       }
     } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
       if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
         if ( millis() >= receiverArmingEnding ) {
           receiverArmingState = RECEIVER_ARMING_COOLDOWN;
           receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-          if ( DEBUG ) Serial1.println("ARMING COOLDOWN");
+          if ( DEBUG ) Serial1.println("5\tARMING COOLDOWN");
         } else {
-          if ( DEBUG ) Serial1.println("ARMING PENDING CANCELLED");
+          if ( DEBUG ) Serial1.println("5\tARMING PENDING CANCELLED");
           receiverArmingState = RECEIVER_ARMING_IDLE;
         }
       } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
         if ( millis() < receiverArmingEnding ) {
-          if ( DEBUG ) Serial1.println("ARMING PENDING CANCELLED");
+          if ( DEBUG ) Serial1.println("5\tARMING PENDING CANCELLED");
           receiverArmingState = RECEIVER_ARMING_IDLE;
         }
       }
@@ -251,7 +251,7 @@ void loop() {
         receiverArmingState = RECEIVER_ARMING_PENDING;
         receiverArmingEnding = millis() + RECEIVER_ARMING_TIME;
         
-        if ( DEBUG ) Serial1.println("ARMING START");
+        if ( DEBUG ) Serial1.println("5\tARMING START");
       }
     }
   }
@@ -372,6 +372,9 @@ void zero_motors() {
 
 void log_data() {
   if ( millis() < nextLogTime ) return;
+  
+  Serial1.print('6'); // arduino data log event
+  Serial1.print('\t');
   
   Serial1.print(millis());
   Serial1.print('\t');
