@@ -53,6 +53,12 @@ const int X = 0;
 const int Y = 1;
 const int Z = 2;
 
+const int RESET_TIME = 5000;
+
+const int ZERO_ITERS = 1000;
+const int ZERO_DELAY = 10; // approx 10 seconds
+int zeroIterCount;
+long nextZeroUpdate;
 
 const long IDLE_DELAY = 2000;
 
@@ -63,12 +69,10 @@ const float MAX_MOTOR_ADJUST = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.25;
 const float MIN_MOTOR_ADJUST = -MAX_MOTOR_ADJUST;
 const float MOTOR_DIFF_SCALE = 0.1;
 
-const long STATE_BUFFER_TIME = 500;
-const long STATE_BUFFER_TIME_ARMED = 2000;
-
-const int STATE_PENDING = 0;
-const int STATE_READY = 1;
-const int STATE_ARMED = 2;
+const int STATE_RESET = 0;
+const int STATE_ZEROING = 1;
+const int STATE_READY = 2;
+const int STATE_ARMED = 3;
 
 int state;
 
@@ -82,19 +86,14 @@ double gyroValues[3];
 int motorValues[4];
 double motorAdjusts[4];
 
-long stateBufferExpires;
+double motorMaster;
+double motorRotate[3];
 
-const long RECEIVER_ARMING_TIME = 3000;
-const long RECEIVER_DISARMING_TIME = 500;
-const long RECEIVER_ARMING_COOLDOWN_TIME = 1000;
-const int RECEIVER_ARMING_IDLE = 0;
-const int RECEIVER_ARMING_PENDING = 1;
-const int RECEIVER_ARMING_COOLDOWN = 2;
-int receiverArmingState;
-long receiverArmingEnding;
-long receiverArmingCooldown;
+const int SERIAL_READ_BUFFER_SIZE = 512;
+char* serialReadBuffer;
+int serialReadBufferIndex = 0;
 
-const long LOG_FREQUENCY = 100;
+const long LOG_FREQUENCY = 500;
 long nextLogTime;
 
 const int CONTROL_ENGAGE_THRESHOLD = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1 );
@@ -102,14 +101,14 @@ boolean controlEngaged;
 
 DrogonPosition pos;
 DrogonController controller(&pos);
-const long CONTROL_FREQUENCY = 5000;
+const long CONTROL_FREQUENCY = 5000; // 5ms
 unsigned long nextControlTime;
 int lastRunDuration;
 
 void setup() {
   Serial1.begin(9600);
   
-  if (DEBUG) Serial1.println("SETUP STARTED");
+  if (DEBUG) Serial1.println("5\tSETUP STARTED");
   
   pinMode( MOTOR_LED_PIN0, OUTPUT );
   pinMode( MOTOR_LED_PIN1, OUTPUT );
@@ -127,8 +126,14 @@ void setup() {
   digitalWrite( READY_LED_PIN, LOW );
   digitalWrite( ARMED_LED_PIN, LOW );
   
+  serialReadBuffer = (char*) malloc( SERIAL_READ_BUFFER_SIZE );
   
-  receiver_setup();
+  motorMaster = 0.0;
+  motorRotate[0] = 0.0;
+  motorRotate[1] = 0.0;
+  motorRotate[2] = 0.0;
+  
+  //receiver_setup();
   
   led_setup( MOTOR_LED_PIN0,
              MOTOR_LED_PIN1,
@@ -138,140 +143,125 @@ void setup() {
   accel_setup();
   gyro_setup();
   
-  state = STATE_PENDING;
-  
-  stateBufferExpires = millis();
+  state = STATE_RESET;
   
   lastRunDuration = 0;
-  receiverArmingState = RECEIVER_ARMING_IDLE;
-  receiverArmingEnding = millis();
-  receiverArmingCooldown = millis();
+  
+  //receiverArmingState = RECEIVER_ARMING_IDLE;
+  //receiverArmingEnding = millis();
+  //receiverArmingCooldown = millis();
+  
   nextLogTime = millis();
   nextControlTime = micros();
   controlEngaged = false;
   
   if (DEBUG) Serial1.println("5\tSETUP FINISHED");
-  if (DEBUG) Serial1.println("5\tSTATE : PENDING");
+  if (DEBUG) Serial1.println("5\tSTATE : STATE_ZEROING");
 }
 
 void loop() {
+  read_serial();
+  
   log_data();
   
-  if ( millis() < stateBufferExpires ) return;
-  
-  if ( state == STATE_ARMED ) {
-    if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
-      if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
-        if ( DEBUG ) Serial1.println("5\tDISARMING COOLDOWN BOUNCING");
-        receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-      } else if ( millis() >= receiverArmingEnding ) {
-        state = STATE_READY;
-        stateBufferExpires = millis() + STATE_BUFFER_TIME;
-        
-        receiverArmingState = RECEIVER_ARMING_IDLE;
-        
-        if ( DEBUG ) Serial1.println("5\tDISARMING FINISHED");
-        if ( DEBUG ) Serial1.println("5\tSTATE : READY");
-      }
-    } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
-      if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
-        if ( millis() >= receiverArmingEnding ) {
-          receiverArmingState = RECEIVER_ARMING_COOLDOWN;
-          receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-          if ( DEBUG ) Serial1.println("5\tDISARMING COOLDOWN");
-          
-          // disarming has started, shut down while waiting for cooldown
-          disarm_motors();
-        } else {
-          if ( DEBUG ) Serial1.println("5\tDISARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-          
-          // disarming cancelled, continue control loop
-          control_loop();
-        }
-      } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
-        if ( millis() < receiverArmingEnding ) {
-          if ( DEBUG ) Serial1.println("5\tDISARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-          
-          // disarming cancelled, continue control loop
-          control_loop();
-        }
-      }
-    } else {
-      if ( receiver_get_value( 4 ) >= 80 && receiver_get_value( 5 ) >= 80 ) {
-        receiverArmingState = RECEIVER_ARMING_PENDING;
-        receiverArmingEnding = millis() + RECEIVER_DISARMING_TIME;
-        
-        if ( DEBUG ) Serial1.println("5\tDISARMING START");
-      }
-      
-      control_loop();
-    }
-  } else if ( state == STATE_PENDING ) {
-    accel_update();
-    gyro_update();
+  if ( state == STATE_RESET ) {
+    accel_reset();
+    gyro_reset();
     
-    if ( receiver_ready() && gyro_ready() && accel_ready() ) {
-      state = STATE_READY;
-      digitalWrite( READY_LED_PIN, HIGH );
-      stateBufferExpires = millis() + STATE_BUFFER_TIME;
+    nextZeroUpdate = millis() + RESET_TIME;
+    
+    state = STATE_ZEROING;
+    
+    if ( DEBUG ) Serial1.println("5\tSTATE : ZEROING");
+  } else if ( state == STATE_ZEROING ) {
+    if ( millis() >= nextZeroUpdate ) {
+      accel_zero_accum();
+      gyro_zero_accum();
       
-      if ( DEBUG ) Serial1.println("5\tSTATE : READY");
+      zeroIterCount++;
+      
+      if ( zeroIterCount >= ZERO_ITERS ) {
+        accel_zero();
+        gyro_zero();
+        
+        state = STATE_READY;
+        digitalWrite( READY_LED_PIN, HIGH );
+        
+        if ( DEBUG ) Serial1.println("5\tSTATE : READY");
+      } else {
+        nextZeroUpdate = millis() + ZERO_DELAY;
+      }
     }
   } else if ( state == STATE_READY ) {
-    position_loop();
-    
-    if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
-      if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
-        if ( DEBUG ) Serial1.println("5\tARMING COOLDOWN BOUNCING");
-        receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-      } else if ( millis() >= receiverArmingEnding ) {
-        state = STATE_ARMED;
-        stateBufferExpires = millis() + STATE_BUFFER_TIME_ARMED;
-        
-        receiverArmingState = RECEIVER_ARMING_IDLE;
-        
-        arm_motors();
-        if ( DEBUG ) Serial1.println("5\tARMING FINISHED");
-        if ( DEBUG ) Serial1.println("5\tSTATE : ARMED");
-      }
-    } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
-      if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
-        if ( millis() >= receiverArmingEnding ) {
-          receiverArmingState = RECEIVER_ARMING_COOLDOWN;
-          receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-          if ( DEBUG ) Serial1.println("5\tARMING COOLDOWN");
-        } else {
-          if ( DEBUG ) Serial1.println("5\tARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-        }
-      } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
-        if ( millis() < receiverArmingEnding ) {
-          if ( DEBUG ) Serial1.println("5\tARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-        }
-      }
+    accel_update();
+    gyro_update();
+  } else if ( state == STATE_ARMED ) {
+    control_loop();
+  }
+}
+
+void read_serial() {
+  while ( Serial1.available() ) {
+    if ( serialReadBufferIndex >= SERIAL_READ_BUFFER_SIZE ) {
+      Serial1.println("5\tOVERFLOWED SERIAL BUFFER!!");
+      serialReadBuffer[SERIAL_READ_BUFFER_SIZE-1] = '\0';
+      parse_serial_command();
+      return;
     } else {
-      if ( receiver_get_value( 4 ) >= 80 && receiver_get_value( 5 ) >= 80 ) {
-        receiverArmingState = RECEIVER_ARMING_PENDING;
-        receiverArmingEnding = millis() + RECEIVER_ARMING_TIME;
-        
-        if ( DEBUG ) Serial1.println("5\tARMING START");
+      serialReadBuffer[serialReadBufferIndex] = Serial1.read();
+      if ( serialReadBuffer[serialReadBufferIndex] == '\n' ) {
+        serialReadBuffer[serialReadBufferIndex] = '\0';
+        parse_serial_command();
+        return;
       }
+      serialReadBufferIndex++;
     }
   }
 }
 
-void position_loop() {
-  long m = micros();
-  
-  if ( m >= nextControlTime ) {
-    position_update( m );
-    
-    lastRunDuration = ( micros() - m );
-    
-    nextControlTime = m + CONTROL_FREQUENCY;
+void parse_serial_command() {
+  int i;
+  switch( serialReadBuffer[0] ) {
+    case 'A':
+      if ( state == STATE_READY ) {
+        arm_motors();
+        state = STATE_ARMED;
+        if ( DEBUG ) Serial1.println("5\tSTATE : ARMED");
+      }
+      break;
+    case 'D':
+      if ( state == STATE_ARMED ) {
+        disarm_motors();
+        state = STATE_READY;
+        if ( DEBUG ) Serial1.println("5\tSTATE : READY");
+      }
+      break;
+    case 'M':
+      i = 1;
+      while ( serialReadBuffer[i] < '0' && serialReadBuffer[i] > '9' ) {
+        if ( serialReadBuffer == '\0' ) {
+          if ( DEBUG ) Serial1.println("5\tMOTOR COMMAND NOT VALID");
+          return;
+        }
+        i++;
+        if ( i >= SERIAL_READ_BUFFER_SIZE ) {
+          if ( DEBUG ) Serial1.println("5\tMOTOR COMMAND NOT VALID");
+          return;
+        }
+        
+        motorMaster = atof(&serialReadBuffer[i]);
+        if ( DEBUG ) {
+          Serial1.print("5\tMOTOR SET TO ");
+          Serial1.print(motorMaster);
+          Serial1.println();
+        }
+      }
+      break;
+    default:
+      Serial1.print("5\tINVALID COMMAND: ");
+      Serial1.print(serialReadBuffer[0]);
+      Serial1.println();
+      break;
   }
 }
 
@@ -414,6 +404,7 @@ void log_data() {
   Serial1.print(lastRunDuration);
   Serial1.print('\t');
   
+  /*
   Serial1.print(receiver_get_state());
   Serial1.print('\t');
   
@@ -428,6 +419,7 @@ void log_data() {
   Serial1.print(receiver_get_value(4));
   Serial1.print('\t');
   Serial1.print(receiver_get_value(5));
+  */
   
   Serial1.print('\t');
   Serial1.print(accelValues[X]);

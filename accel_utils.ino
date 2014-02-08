@@ -22,34 +22,34 @@
 
 const int ANALOG_RESOLUTION = 12;
 
-const int ACCEL_ZERO_ITERS = 500;
-const int ACCEL_ZERO_DELAY = 10; // approx 5 seconds
+const int ACCEL_ZERO_ITERS = 1000;
+const int ACCEL_ZERO_DELAY = 10; // approx 10 seconds
 
 const float ACCEL_FILTER_ALPHA = 0.8;
 
 const double ACCEL_ZERO_BUFFER = 2.5;
 
 int accelZeroCount;
-int accelZeroXValues[ACCEL_ZERO_ITERS];
-int accelZeroYValues[ACCEL_ZERO_ITERS];
-int accelZeroZValues[ACCEL_ZERO_ITERS];
-boolean accelZerod;
+long accelZeroXTotal;
+long accelZeroYTotal;
+long accelZeroZTotal;
+boolean accelZeroed;
 
 double accelZeroX;
 double accelZeroY;
 double accelZeroZ;
 
-long accelNextUpdate;
-
 void accel_reset() {
+  accelZeroed = false;
+  
+  accelZeroXTotal = 0;
+  accelZeroYTotal = 0;
+  accelZeroZTotal = 0;
   accelZeroCount = 0;
-  accelZerod = false;
   
   accelValues[X] = 0;
   accelValues[Y] = 0;
   accelValues[Z] = 0;  
-  
-  accelNextUpdate = millis() + IDLE_DELAY;
 }
 
 void accel_setup() {
@@ -58,49 +58,38 @@ void accel_setup() {
   accel_reset();
 }
 
+void accel_zero_accum() {
+  int gx = analogRead( ACCEL_PIN_X );
+  int gy = analogRead( ACCEL_PIN_Y );
+  int gz = analogRead( ACCEL_PIN_Z );
+  
+  accelZeroXTotal += gx;
+  accelZeroYTotal += gy;
+  accelZeroZTotal += gz;
+  accelZeroCount += 1;
+  
+  accelValues[X] = gx;
+  accelValues[Y] = gy;
+  accelValues[Z] = gz;
+}
+
+void accel_zero() {
+  accelZeroX = accelZeroXTotal / (double) accelZeroCount;
+  accelZeroY = accelZeroYTotal / (double) accelZeroCount;
+  accelZeroZ = accelZeroZTotal / (double) accelZeroCount;
+  accelZeroed = true;
+  
+  accelValues[X] = 0.0;
+  accelValues[Y] = 0.0;
+  accelValues[Z] = 0.0;
+}
+
 void accel_update() {
   int gx = analogRead( ACCEL_PIN_X );
   int gy = analogRead( ACCEL_PIN_Y );
   int gz = analogRead( ACCEL_PIN_Z );
 
-  if ( !accelZerod ) {
-    if ( millis() >= accelNextUpdate ) {
-      accelZeroXValues[accelZeroCount] = gx;
-      accelZeroYValues[accelZeroCount] = gy;
-      accelZeroZValues[accelZeroCount] = gz;
-      accelZeroCount += 1;
-      
-      accelValues[X] = gx;
-      accelValues[Y] = gy;
-      accelValues[Z] = gz;
-      
-      if ( accelZeroCount >= ACCEL_ZERO_ITERS ) {
-        int zeroXTotal = 0;
-        int zeroYTotal = 0;
-        int zeroZTotal = 0;
-        
-        for ( int i = 0; i < ACCEL_ZERO_ITERS; i++ ) {
-          zeroXTotal += accelZeroXValues[i];
-          zeroYTotal += accelZeroYValues[i];
-          zeroZTotal += accelZeroZValues[i];
-        }
-        
-        accelZeroX = zeroXTotal / (double) accelZeroCount;
-        accelZeroY = zeroYTotal / (double) accelZeroCount;
-        accelZeroZ = zeroZTotal / (double) accelZeroCount;
-        accelZerod = true;
-        
-        //Serial.print("Z");
-        //printXYZ( gx, gy, gz, zeroX, zeroY, zeroZ );
-        
-        accelValues[X] = accelZeroX;
-        accelValues[Y] = accelZeroX;
-        accelValues[Z] = accelZeroZ;
-      }
-      
-      accelNextUpdate = millis() + ACCEL_ZERO_DELAY;
-    }
-  } else {
+  if ( accelZeroed ) {
     double ax = ( gx - accelZeroX );
     double ay = ( gy - accelZeroY );
     double az = ( gz - accelZeroZ );
@@ -113,9 +102,5 @@ void accel_update() {
     accelValues[Y] = ay; // + ACCEL_FILTER_ALPHA * ( accelValues[Y] - gy );
     accelValues[Z] = az; // + ACCEL_FILTER_ALPHA * ( accelValues[Z] - gz );
   }
-}
-
-boolean accel_ready( ) {
-  return accelZerod;
 }
 
