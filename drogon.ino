@@ -103,12 +103,12 @@ DrogonPosition pos;
 DrogonController controller(&pos);
 const long CONTROL_FREQUENCY = 5000; // 5ms
 unsigned long nextControlTime;
-int lastRunDuration;
+unsigned long lastRunDuration;
 
 void setup() {
-  Serial1.begin(9600);
+  Serial.begin(9600);
   
-  if (DEBUG) Serial1.println("5\tSETUP STARTED");
+  if (DEBUG) Serial.println("5\tSETUP STARTED");
   
   pinMode( MOTOR_LED_PIN0, OUTPUT );
   pinMode( MOTOR_LED_PIN1, OUTPUT );
@@ -155,8 +155,8 @@ void setup() {
   nextControlTime = micros();
   controlEngaged = false;
   
-  if (DEBUG) Serial1.println("5\tSETUP FINISHED");
-  if (DEBUG) Serial1.println("5\tSTATE : STATE_ZEROING");
+  if (DEBUG) Serial.println("5\tSETUP FINISHED");
+  if (DEBUG) Serial.println("5\tSTATE : RESET");
 }
 
 void loop() {
@@ -172,7 +172,7 @@ void loop() {
     
     state = STATE_ZEROING;
     
-    if ( DEBUG ) Serial1.println("5\tSTATE : ZEROING");
+    if ( DEBUG ) Serial.println("5\tSTATE : ZEROING");
   } else if ( state == STATE_ZEROING ) {
     if ( millis() >= nextZeroUpdate ) {
       accel_zero_accum();
@@ -187,31 +187,32 @@ void loop() {
         state = STATE_READY;
         digitalWrite( READY_LED_PIN, HIGH );
         
-        if ( DEBUG ) Serial1.println("5\tSTATE : READY");
+        if ( DEBUG ) Serial.println("5\tSTATE : READY");
       } else {
         nextZeroUpdate = millis() + ZERO_DELAY;
       }
     }
   } else if ( state == STATE_READY ) {
-    accel_update();
-    gyro_update();
+    position_loop();
   } else if ( state == STATE_ARMED ) {
     control_loop();
   }
 }
 
 void read_serial() {
-  while ( Serial1.available() ) {
+  while ( Serial.available() ) {
     if ( serialReadBufferIndex >= SERIAL_READ_BUFFER_SIZE ) {
-      Serial1.println("5\tOVERFLOWED SERIAL BUFFER!!");
+      Serial.println("5\tOVERFLOWED SERIAL BUFFER!!");
       serialReadBuffer[SERIAL_READ_BUFFER_SIZE-1] = '\0';
       parse_serial_command();
+      serialReadBufferIndex = 0;
       return;
     } else {
-      serialReadBuffer[serialReadBufferIndex] = Serial1.read();
+      serialReadBuffer[serialReadBufferIndex] = Serial.read();
       if ( serialReadBuffer[serialReadBufferIndex] == '\n' ) {
         serialReadBuffer[serialReadBufferIndex] = '\0';
         parse_serial_command();
+        serialReadBufferIndex = 0;
         return;
       }
       serialReadBufferIndex++;
@@ -226,46 +227,57 @@ void parse_serial_command() {
       if ( state == STATE_READY ) {
         arm_motors();
         state = STATE_ARMED;
-        if ( DEBUG ) Serial1.println("5\tSTATE : ARMED");
+        if ( DEBUG ) Serial.println("5\tSTATE : ARMED");
       }
       break;
     case 'D':
       if ( state == STATE_ARMED ) {
         disarm_motors();
         state = STATE_READY;
-        if ( DEBUG ) Serial1.println("5\tSTATE : READY");
+        if ( DEBUG ) Serial.println("5\tSTATE : READY");
       }
       break;
     case 'M':
       i = 1;
       while ( serialReadBuffer[i] < '0' && serialReadBuffer[i] > '9' ) {
         if ( serialReadBuffer == '\0' ) {
-          if ( DEBUG ) Serial1.println("5\tMOTOR COMMAND NOT VALID");
+          if ( DEBUG ) Serial.println("5\tMOTOR COMMAND NOT VALID");
           return;
         }
         i++;
         if ( i >= SERIAL_READ_BUFFER_SIZE ) {
-          if ( DEBUG ) Serial1.println("5\tMOTOR COMMAND NOT VALID");
+          if ( DEBUG ) Serial.println("5\tMOTOR COMMAND NOT VALID");
           return;
         }
-        
-        motorMaster = atof(&serialReadBuffer[i]);
-        if ( DEBUG ) {
-          Serial1.print("5\tMOTOR SET TO ");
-          Serial1.print(motorMaster);
-          Serial1.println();
-        }
+      }
+      motorMaster = atof(&serialReadBuffer[i]);
+      if ( DEBUG ) {
+        Serial.print("5\tMOTOR SET TO ");
+        Serial.print(motorMaster);
+        Serial.println();
       }
       break;
     default:
-      Serial1.print("5\tINVALID COMMAND: ");
-      Serial1.print(serialReadBuffer[0]);
-      Serial1.println();
+      Serial.print("5\tINVALID COMMAND: ");
+      Serial.print(serialReadBuffer[0]);
+      Serial.println();
       break;
   }
 }
 
-void position_update( long m ) {
+void position_loop() {
+  unsigned long m = micros();
+  
+  if ( m >= nextControlTime ) {
+    position_update( m );
+    
+    lastRunDuration = ( micros() - m );
+    
+    nextControlTime = m + CONTROL_FREQUENCY;
+  }
+}
+
+void position_update( unsigned long m ) {
   accel_update();
   gyro_update();
   
@@ -286,15 +298,11 @@ void control_loop() {
 }
 
 void control_loop_update( unsigned long m ) {
-  double zeroTarget[] = { 0.0, 0.0, 0.0 };
-  
   position_update( m );
   
-  double receiver0 = receiver_get_value(0);
-  double receiver1 = receiver_get_value(1);
-  double receiver2 = receiver_get_value(2);
+  int target = (int) map_double( motorMaster, 0.0, 100.0, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
   
-  int target = max( 0, map( -receiver2*10, 0, 1000, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
+  target = constrain( target, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
   
   if ( controlEngaged ) {
     if ( target < CONTROL_ENGAGE_THRESHOLD ) {
@@ -307,7 +315,7 @@ void control_loop_update( unsigned long m ) {
       
       controlEngaged = false;
     } else {
-      controller.control_update( m, zeroTarget );
+      controller.control_update( m, motorRotate );
       
       motorAdjusts[0] = controller.motorAdjusts[0];
       motorAdjusts[1] = controller.motorAdjusts[1];
@@ -317,7 +325,7 @@ void control_loop_update( unsigned long m ) {
   } else if ( target >= CONTROL_ENGAGE_THRESHOLD ) {
     controller.reset( m );
     
-    controller.control_update( m, zeroTarget );
+    controller.control_update( m, motorRotate );
     
     motorAdjusts[0] = controller.motorAdjusts[0];
     motorAdjusts[1] = controller.motorAdjusts[1];
@@ -325,19 +333,6 @@ void control_loop_update( unsigned long m ) {
     motorAdjusts[3] = controller.motorAdjusts[3];
     
     controlEngaged = true;
-  }
-  
-  // allow error scaling by receiver channel 1
-  if ( receiver1 < 0.0 ) {
-    motorAdjusts[0] += ( motorAdjusts[0] * -receiver1 / 10.0 );
-    motorAdjusts[1] += ( motorAdjusts[1] * -receiver1 / 10.0 );
-    motorAdjusts[2] += ( motorAdjusts[2] * -receiver1 / 10.0 );
-    motorAdjusts[3] += ( motorAdjusts[3] * -receiver1 / 10.0 );
-  } else if ( receiver1 > 0.0 ) {
-    motorAdjusts[0] -= ( motorAdjusts[0] * ( receiver1 / 100.0 ) );
-    motorAdjusts[1] -= ( motorAdjusts[1] * ( receiver1 / 100.0 ) );
-    motorAdjusts[2] -= ( motorAdjusts[2] * ( receiver1 / 100.0 ) );
-    motorAdjusts[3] -= ( motorAdjusts[3] * ( receiver1 / 100.0 ) );
   }
   
   motorAdjusts[0] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[0] ) );
@@ -384,6 +379,11 @@ void update_motors() {
 }
 
 void zero_motors() {
+  motorMaster = 0.0;
+  motorRotate[0] = 0.0;
+  motorRotate[1] = 0.0;
+  motorRotate[2] = 0.0;
+  
   motorValues[0] = 0.0;
   motorValues[1] = 0.0;
   motorValues[2] = 0.0;
@@ -392,69 +392,75 @@ void zero_motors() {
   update_motors();
 }
 
+double map_double(double x, double in_min, double in_max, double out_min, double out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
+
+
 void log_data() {
   if ( millis() < nextLogTime ) return;
   
-  Serial1.print('6'); // arduino data log event
-  Serial1.print('\t');
+  Serial.print('6'); // arduino data log event
+  Serial.print('\t');
   
-  Serial1.print(millis());
-  Serial1.print('\t');
+  Serial.print(millis());
+  Serial.print('\t');
   
-  Serial1.print(lastRunDuration);
-  Serial1.print('\t');
+  Serial.print(lastRunDuration);
+  Serial.print('\t');
   
   /*
-  Serial1.print(receiver_get_state());
-  Serial1.print('\t');
+  Serial.print(receiver_get_state());
+  Serial.print('\t');
   
-  Serial1.print(receiver_get_value(0));
-  Serial1.print('\t');
-  Serial1.print(receiver_get_value(1));
-  Serial1.print('\t');
-  Serial1.print(receiver_get_value(2));
-  Serial1.print('\t');
-  Serial1.print(receiver_get_value(3));
-  Serial1.print('\t');
-  Serial1.print(receiver_get_value(4));
-  Serial1.print('\t');
-  Serial1.print(receiver_get_value(5));
+  Serial.print(receiver_get_value(0));
+  Serial.print('\t');
+  Serial.print(receiver_get_value(1));
+  Serial.print('\t');
+  Serial.print(receiver_get_value(2));
+  Serial.print('\t');
+  Serial.print(receiver_get_value(3));
+  Serial.print('\t');
+  Serial.print(receiver_get_value(4));
+  Serial.print('\t');
+  Serial.print(receiver_get_value(5));
   */
   
-  Serial1.print('\t');
-  Serial1.print(accelValues[X]);
-  Serial1.print('\t');
-  Serial1.print(accelValues[Y]);
-  Serial1.print('\t');
-  Serial1.print(accelValues[Z]);
+  Serial.print('\t');
+  Serial.print(accelValues[X]);
+  Serial.print('\t');
+  Serial.print(accelValues[Y]);
+  Serial.print('\t');
+  Serial.print(accelValues[Z]);
   
-  Serial1.print('\t');
-  Serial1.print(gyroValues[X]);
-  Serial1.print('\t');
-  Serial1.print(gyroValues[Y]);
-  Serial1.print('\t');
-  Serial1.print(gyroValues[Z]);
+  Serial.print('\t');
+  Serial.print(gyroValues[X]);
+  Serial.print('\t');
+  Serial.print(gyroValues[Y]);
+  Serial.print('\t');
+  Serial.print(gyroValues[Z]);
   
-  Serial1.print('\t');
-  Serial1.print(motorAdjusts[0]);
-  Serial1.print('\t');
-  Serial1.print(motorAdjusts[1]);
-  Serial1.print('\t');
-  Serial1.print(motorAdjusts[2]);
-  Serial1.print('\t');
-  Serial1.print(motorAdjusts[3]);
+  Serial.print('\t');
+  Serial.print(motorAdjusts[0]);
+  Serial.print('\t');
+  Serial.print(motorAdjusts[1]);
+  Serial.print('\t');
+  Serial.print(motorAdjusts[2]);
+  Serial.print('\t');
+  Serial.print(motorAdjusts[3]);
   
-  Serial1.print('\t');
-  Serial1.print(pos.x);
-  Serial1.print('\t');
-  Serial1.print(pos.y);
+  Serial.print('\t');
+  Serial.print(pos.x);
+  Serial.print('\t');
+  Serial.print(pos.y);
   
-  Serial1.print('\t');
-  Serial1.print(controller.pidAbsoluteA.error);
-  Serial1.print('\t');
-  Serial1.print(controller.pidAbsoluteB.error);
+  Serial.print('\t');
+  Serial.print(controller.pidAbsoluteA.error);
+  Serial.print('\t');
+  Serial.print(controller.pidAbsoluteB.error);
   
-  Serial1.println();
+  Serial.println();
   
   nextLogTime = millis() + LOG_FREQUENCY;
 }
