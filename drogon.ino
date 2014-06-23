@@ -108,7 +108,7 @@ unsigned long lastRunDuration;
 void setup() {
   Serial.begin(9600);
   
-  if (DEBUG) Serial.println("5\tSETUP STARTED");
+  if (DEBUG) Serial.println("D\tSETUP STARTED");
   
   pinMode( MOTOR_LED_PIN0, OUTPUT );
   pinMode( MOTOR_LED_PIN1, OUTPUT );
@@ -155,8 +155,8 @@ void setup() {
   nextControlTime = micros();
   controlEngaged = false;
   
-  if (DEBUG) Serial.println("5\tSETUP FINISHED");
-  if (DEBUG) Serial.println("5\tSTATE : RESET");
+  if (DEBUG) Serial.println("D\tSETUP FINISHED");
+  if (DEBUG) Serial.println("D\tSTATE : RESET");
 }
 
 void loop() {
@@ -172,7 +172,7 @@ void loop() {
     
     state = STATE_ZEROING;
     
-    if ( DEBUG ) Serial.println("5\tSTATE : ZEROING");
+    if ( DEBUG ) Serial.println("D\tSTATE : ZEROING");
   } else if ( state == STATE_ZEROING ) {
     if ( millis() >= nextZeroUpdate ) {
       accel_zero_accum();
@@ -187,7 +187,7 @@ void loop() {
         state = STATE_READY;
         digitalWrite( READY_LED_PIN, HIGH );
         
-        if ( DEBUG ) Serial.println("5\tSTATE : READY");
+        if ( DEBUG ) Serial.println("D\tSTATE : READY");
       } else {
         nextZeroUpdate = millis() + ZERO_DELAY;
       }
@@ -202,7 +202,7 @@ void loop() {
 void read_serial() {
   while ( Serial.available() ) {
     if ( serialReadBufferIndex >= SERIAL_READ_BUFFER_SIZE ) {
-      Serial.println("5\tOVERFLOWED SERIAL BUFFER!!");
+      Serial.println("D\tOVERFLOWED SERIAL BUFFER!!");
       serialReadBuffer[SERIAL_READ_BUFFER_SIZE-1] = '\0';
       parse_serial_command();
       serialReadBufferIndex = 0;
@@ -224,41 +224,54 @@ void parse_serial_command() {
   int i;
   switch( serialReadBuffer[0] ) {
     case 'A':
-      if ( state == STATE_READY ) {
-        arm_motors();
-        state = STATE_ARMED;
-        if ( DEBUG ) Serial.println("5\tSTATE : ARMED");
+      i = 1;
+      while ( serialReadBuffer[i] < '0' && serialReadBuffer[i] > '9' ) {
+        if ( serialReadBuffer == '\0' ) {
+          if ( DEBUG ) Serial.println("D\tARM COMMAND NOT VALID");
+          return;
+        }
+        i++;
+        if ( i >= SERIAL_READ_BUFFER_SIZE ) {
+          if ( DEBUG ) Serial.println("D\tARM COMMAND NOT VALID");
+          return;
+        }
       }
-      break;
-    case 'D':
-      if ( state == STATE_ARMED ) {
-        disarm_motors();
-        state = STATE_READY;
-        if ( DEBUG ) Serial.println("5\tSTATE : READY");
+      if ( serialReadBuffer[i] == '1' ) {
+        if ( state == STATE_READY ) {
+          arm_motors();
+          state = STATE_ARMED;
+          if ( DEBUG ) Serial.println("D\tSTATE : ARMED");
+        }
+      } else {
+        if ( state == STATE_ARMED ) {
+          disarm_motors();
+          state = STATE_READY;
+          if ( DEBUG ) Serial.println("D\tSTATE : READY");
+        }
       }
       break;
     case 'M':
       i = 1;
       while ( serialReadBuffer[i] < '0' && serialReadBuffer[i] > '9' ) {
         if ( serialReadBuffer[i] == '\0' ) {
-          if ( DEBUG ) Serial.println("5\tMOTOR COMMAND NOT VALID");
+          if ( DEBUG ) Serial.println("D\tMOTOR COMMAND NOT VALID");
           return;
         }
         i++;
         if ( i >= SERIAL_READ_BUFFER_SIZE ) {
-          if ( DEBUG ) Serial.println("5\tMOTOR COMMAND NOT VALID");
+          if ( DEBUG ) Serial.println("D\tMOTOR COMMAND NOT VALID");
           return;
         }
       }
       motorMaster = atof(&serialReadBuffer[i]);
       if ( DEBUG ) {
-        Serial.print("5\tMOTOR SET TO ");
+        Serial.print("D\tMOTOR SET TO ");
         Serial.print(motorMaster);
         Serial.println();
       }
       break;
     default:
-      Serial.print("5\tINVALID COMMAND: ");
+      Serial.print("D\tINVALID COMMAND: ");
       Serial.print(serialReadBuffer[0]);
       Serial.println();
       break;
@@ -401,8 +414,7 @@ double map_double(double x, double in_min, double in_max, double out_min, double
 void log_data() {
   if ( millis() < nextLogTime ) return;
   
-  Serial.print('6'); // arduino data log event
-  Serial.print('\t');
+  Serial.print('L'); // log prefix
   
   Serial.print(millis());
   Serial.print('\t');
