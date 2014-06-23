@@ -240,7 +240,7 @@ void parse_serial_command() {
     case 'M':
       i = 1;
       while ( serialReadBuffer[i] < '0' && serialReadBuffer[i] > '9' ) {
-        if ( serialReadBuffer == '\0' ) {
+        if ( serialReadBuffer[i] == '\0' ) {
           if ( DEBUG ) Serial.println("5\tMOTOR COMMAND NOT VALID");
           return;
         }
@@ -456,9 +456,9 @@ void log_data() {
   Serial.print(pos.y);
   
   Serial.print('\t');
-  Serial.print(controller.pidAbsoluteA.error);
+  Serial.print(controller.pidA.error);
   Serial.print('\t');
-  Serial.print(controller.pidAbsoluteB.error);
+  Serial.print(controller.pidB.error);
   
   Serial.println();
   
