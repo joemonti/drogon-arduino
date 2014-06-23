@@ -93,7 +93,7 @@ const int SERIAL_READ_BUFFER_SIZE = 512;
 char* serialReadBuffer;
 int serialReadBufferIndex = 0;
 
-const long LOG_FREQUENCY = 500;
+const long LOG_FREQUENCY = 100;
 long nextLogTime;
 
 const int CONTROL_ENGAGE_THRESHOLD = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1 );
@@ -226,7 +226,7 @@ void parse_serial_command() {
     case 'A':
       i = 1;
       while ( serialReadBuffer[i] < '0' && serialReadBuffer[i] > '9' ) {
-        if ( serialReadBuffer == '\0' ) {
+        if ( serialReadBuffer[i] == '\0' ) {
           if ( DEBUG ) Serial.println("D\tARM COMMAND NOT VALID");
           return;
         }
@@ -414,30 +414,13 @@ double map_double(double x, double in_min, double in_max, double out_min, double
 void log_data() {
   if ( millis() < nextLogTime ) return;
   
-  Serial.print("L\t"); // log prefix
+  Serial.print("L\t"); // arduino data log event
   
   Serial.print(millis());
   Serial.print('\t');
   
   Serial.print(lastRunDuration);
   Serial.print('\t');
-  
-  /*
-  Serial.print(receiver_get_state());
-  Serial.print('\t');
-  
-  Serial.print(receiver_get_value(0));
-  Serial.print('\t');
-  Serial.print(receiver_get_value(1));
-  Serial.print('\t');
-  Serial.print(receiver_get_value(2));
-  Serial.print('\t');
-  Serial.print(receiver_get_value(3));
-  Serial.print('\t');
-  Serial.print(receiver_get_value(4));
-  Serial.print('\t');
-  Serial.print(receiver_get_value(5));
-  */
   
   Serial.print('\t');
   Serial.print(accelValues[X]);
