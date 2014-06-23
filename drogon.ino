@@ -414,7 +414,7 @@ double map_double(double x, double in_min, double in_max, double out_min, double
 void log_data() {
   if ( millis() < nextLogTime ) return;
   
-  Serial.print('L'); // log prefix
+  Serial.print("L\t"); // log prefix
   
   Serial.print(millis());
   Serial.print('\t');
