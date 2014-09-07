@@ -418,9 +418,15 @@ void control_loop() {
 void control_loop_update( unsigned long m ) {
   position_update( m );
   
-  int target = (int) map_double( motorMaster, 0.0, 100.0, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
+  double receiver0 = receiver_get_value(0);
+  double receiver1 = receiver_get_value(1);
+  double receiver2 = receiver_get_value(2);
   
-  target = constrain( target, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
+  int target = max( 0, map( -receiver2*10, 0, 1000, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
+
+  //int target = (int) map_double( motorMaster, 0.0, 100.0, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
+  
+  //target = constrain( target, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
   
   if ( controlEngaged ) {
     if ( target < CONTROL_ENGAGE_THRESHOLD ) {
