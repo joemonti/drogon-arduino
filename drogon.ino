@@ -326,7 +326,7 @@ void read_serial() {
 }
 
 void parse_serial_command() {
-  int i;
+  int i, armUpdate;
   switch( serialReadBuffer[0] ) {
     case 'A':
       i = 1;
@@ -341,7 +341,9 @@ void parse_serial_command() {
           return;
         }
       }
-      if ( serialReadBuffer[i] == '1' ) {
+      armUpdate = atoi(&serialReadBuffer[i]);
+      
+      if ( armUpdate > 0 ) {
         if ( state == STATE_READY ) {
           arm_motors();
           state = STATE_ARMED;
