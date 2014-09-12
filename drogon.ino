@@ -420,8 +420,8 @@ void control_loop() {
 void control_loop_update( unsigned long m ) {
   position_update( m );
   
-  double receiver0 = receiver_get_value(0);
-  double receiver1 = receiver_get_value(1);
+  //double receiver0 = receiver_get_value(0);
+  //double receiver1 = receiver_get_value(1);
   double receiver2 = receiver_get_value(2);
   
   int target = max( 0, map( -receiver2*10, 0, 1000, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
@@ -432,6 +432,8 @@ void control_loop_update( unsigned long m ) {
   
   if ( controlEngaged ) {
     if ( target < CONTROL_ENGAGE_THRESHOLD ) {
+      controller.tune();
+      log_pid();
       controller.reset( m );
       
       motorAdjusts[0] = 0;
@@ -570,5 +572,18 @@ void log_data() {
   Serial1.println();
   
   nextLogTime = millis() + LOG_FREQUENCY;
+}
+
+void log_pid() {
+  Serial1.print("P\t"); // arduino data log event
+  Serial1.print(millis());
+  Serial1.print('\t');
+  Serial1.print(controller.pidA.get_thetas()[0]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidA.get_thetas()[1]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidA.get_thetas()[2]);
+  
+  Serial1.println();
 }
 
