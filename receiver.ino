@@ -154,7 +154,7 @@ double receiver_get_value( int c ) {
                     pulsesCentValue[c];
     return max( -1000, min( value, 1000 ) ) / 10.0;
   } else {
-    return -1;
+    return 0.0;
   }
 }
 

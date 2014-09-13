@@ -92,6 +92,9 @@ double motorAdjusts[4];
 double motorMaster;
 double motorRotate[3];
 
+const double MAX_MOTOR_MASTER_CHANGE = 1.0;
+const double MOTOR_MASTER_STOP_CHANGE = 0.05;
+
 long stateBufferExpires;
 
 const long RECEIVER_ARMING_TIME = 3000;
@@ -108,10 +111,11 @@ const int SERIAL_READ_BUFFER_SIZE = 512;
 char* serialReadBuffer;
 int serialReadBufferIndex = 0;
 
-const long LOG_FREQUENCY = 100;
+const long LOG_FREQUENCY = 200;
 long nextLogTime;
 
-const int CONTROL_ENGAGE_THRESHOLD = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1 );
+const int CONTROL_ENGAGE_THRESHOLD_HIGH = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1 );
+const int CONTROL_ENGAGE_THRESHOLD_LOW = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.08 );
 boolean controlEngaged;
 
 DrogonPosition pos;
@@ -420,20 +424,35 @@ void control_loop() {
 void control_loop_update( unsigned long m ) {
   position_update( m );
   
-  //double receiver0 = receiver_get_value(0);
-  //double receiver1 = receiver_get_value(1);
-  double receiver2 = receiver_get_value(2);
+  if ( receiver_ready() ) {
+    double receiver2 = receiver_get_value(2);
+    
+    double motorMasterUpdate = -receiver2;
+    if ( ( motorMasterUpdate - motorMaster ) > MAX_MOTOR_MASTER_CHANGE ) {
+      motorMaster += MAX_MOTOR_MASTER_CHANGE;
+    } else if ( ( motorMaster - motorMasterUpdate ) > MAX_MOTOR_MASTER_CHANGE ) {
+      motorMaster -= MAX_MOTOR_MASTER_CHANGE;
+    } else {
+      motorMaster = motorMasterUpdate;
+    }
+  } else {
+    motorMaster -= MOTOR_MASTER_STOP_CHANGE;
+    if ( motorMaster < 0.0 ) {
+      motorMaster = 0.0;
+    }
+  }
+    
+  int target = (int) map_double( motorMaster, 0.0, 100.0, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
+  target = constrain( target, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
   
-  int target = max( 0, map( -receiver2*10, 0, 1000, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE ) );
-
   //int target = (int) map_double( motorMaster, 0.0, 100.0, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
   
   //target = constrain( target, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
   
   if ( controlEngaged ) {
-    if ( target < CONTROL_ENGAGE_THRESHOLD ) {
+    if ( target < CONTROL_ENGAGE_THRESHOLD_LOW ) {
       controller.tune();
-      log_pid();
+      log_pid( );
       controller.reset( m );
       
       motorAdjusts[0] = 0;
@@ -450,7 +469,7 @@ void control_loop_update( unsigned long m ) {
       motorAdjusts[2] = controller.motorAdjusts[2];
       motorAdjusts[3] = controller.motorAdjusts[3];
     }
-  } else if ( target >= CONTROL_ENGAGE_THRESHOLD ) {
+  } else if ( target >= CONTROL_ENGAGE_THRESHOLD_HIGH ) {
     controller.reset( m );
     
     controller.control_update( m, motorRotate );
@@ -569,6 +588,9 @@ void log_data() {
   Serial1.print('\t');
   Serial1.print(controller.pidB.error);
   
+  Serial1.print('\t');
+  Serial1.print(motorMaster);
+  
   Serial1.println();
   
   nextLogTime = millis() + LOG_FREQUENCY;
@@ -578,11 +600,33 @@ void log_pid() {
   Serial1.print("P\t"); // arduino data log event
   Serial1.print(millis());
   Serial1.print('\t');
+  Serial1.print(controller.pidATuner.getLastError());
+  Serial1.print('\t');
+  Serial1.print(controller.pidATuner.getAdjusts()[0]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidATuner.getAdjusts()[1]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidATuner.getAdjusts()[2]);
+  Serial1.print('\t');
   Serial1.print(controller.pidA.get_thetas()[0]);
   Serial1.print('\t');
   Serial1.print(controller.pidA.get_thetas()[1]);
   Serial1.print('\t');
   Serial1.print(controller.pidA.get_thetas()[2]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidBTuner.getLastError());
+  Serial1.print('\t');
+  Serial1.print(controller.pidBTuner.getAdjusts()[0]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidBTuner.getAdjusts()[1]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidBTuner.getAdjusts()[2]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidB.get_thetas()[0]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidB.get_thetas()[1]);
+  Serial1.print('\t');
+  Serial1.print(controller.pidB.get_thetas()[2]);
   
   Serial1.println();
 }
