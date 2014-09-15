@@ -599,34 +599,38 @@ void log_data() {
 void log_pid() {
   Serial1.print("P\t"); // arduino data log event
   Serial1.print(millis());
+  Serial1.print("\tA\t");
+  Serial1.print(controller.pidATuner.getLastError(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getLastError());
+  Serial1.print(controller.pidATuner.getAdjusts()[0], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getAdjusts()[0]);
+  Serial1.print(controller.pidATuner.getAdjusts()[1], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getAdjusts()[1]);
+  Serial1.print(controller.pidATuner.getAdjusts()[2], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getAdjusts()[2]);
+  Serial1.print(controller.pidA.get_thetas()[0], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidA.get_thetas()[0]);
+  Serial1.print(controller.pidA.get_thetas()[1], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidA.get_thetas()[1]);
+  Serial1.print(controller.pidA.get_thetas()[2], 5);
+  Serial1.println();
+  
+  Serial1.print("P\t"); // arduino data log event
+  Serial1.print(millis());
+  Serial1.print("\tB\t");
+  Serial1.print(controller.pidBTuner.getLastError(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidA.get_thetas()[2]);
+  Serial1.print(controller.pidBTuner.getAdjusts()[0], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getLastError());
+  Serial1.print(controller.pidBTuner.getAdjusts()[1], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getAdjusts()[0]);
+  Serial1.print(controller.pidBTuner.getAdjusts()[2], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getAdjusts()[1]);
+  Serial1.print(controller.pidB.get_thetas()[0], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getAdjusts()[2]);
+  Serial1.print(controller.pidB.get_thetas()[1], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidB.get_thetas()[0]);
-  Serial1.print('\t');
-  Serial1.print(controller.pidB.get_thetas()[1]);
-  Serial1.print('\t');
-  Serial1.print(controller.pidB.get_thetas()[2]);
+  Serial1.print(controller.pidB.get_thetas()[2], 5);
   
   Serial1.println();
 }
