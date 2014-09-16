@@ -92,8 +92,8 @@ double motorAdjusts[4];
 double motorMaster;
 double motorRotate[3];
 
-const double MAX_MOTOR_MASTER_CHANGE = 1.0;
-const double MOTOR_MASTER_STOP_CHANGE = 0.05;
+const double MAX_MOTOR_MASTER_CHANGE = 5.0;
+const double MOTOR_MASTER_STOP_CHANGE = 0.1;
 
 long stateBufferExpires;
 
@@ -111,7 +111,7 @@ const int SERIAL_READ_BUFFER_SIZE = 512;
 char* serialReadBuffer;
 int serialReadBufferIndex = 0;
 
-const long LOG_FREQUENCY = 200;
+const long LOG_FREQUENCY = 20;
 long nextLogTime;
 
 const int CONTROL_ENGAGE_THRESHOLD_HIGH = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1 );
@@ -631,6 +631,24 @@ void log_pid() {
   Serial1.print(controller.pidB.get_thetas()[1], 5);
   Serial1.print('\t');
   Serial1.print(controller.pidB.get_thetas()[2], 5);
+  Serial1.println();
+  
+  Serial1.print("P\t"); // arduino data log event
+  Serial1.print(millis());
+  Serial1.print("\tR\t");
+  Serial1.print(controller.pidRotateTuner.getLastError(), 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotateTuner.getAdjusts()[0], 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotateTuner.getAdjusts()[1], 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotateTuner.getAdjusts()[2], 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotate.get_thetas()[0], 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotate.get_thetas()[1], 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotate.get_thetas()[2], 5);
   
   Serial1.println();
 }
