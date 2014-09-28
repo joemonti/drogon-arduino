@@ -67,6 +67,8 @@ const int MIN_MOTOR_VALUE = 1000;
 const int MAX_MOTOR_VALUE = 2000; //2000;
 const float MAX_MOTOR_ADJUST = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.25;
 const float MIN_MOTOR_ADJUST = -MAX_MOTOR_ADJUST;
+const float MAX_MOTOR_ZROT_ADJUST = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1;
+const float MIN_MOTOR_ZROT_ADJUST = -MAX_MOTOR_ZROT_ADJUST;
 const float MOTOR_DIFF_SCALE = 0.1;
 
 const long STATE_BUFFER_TIME = 500;
@@ -88,6 +90,7 @@ double accelValues[3];
 double gyroValues[3];
 int motorValues[4];
 double motorAdjusts[4];
+double zRotAdjust;
 
 double motorMaster;
 double motorRotate[3];
@@ -123,6 +126,9 @@ DrogonController controller(&pos);
 const long CONTROL_FREQUENCY = 5000; // 5ms
 unsigned long nextControlTime;
 unsigned long lastRunDuration;
+unsigned long lastRunStart;
+unsigned long lastRunInterval;
+unsigned long controlIters;
 
 void setup() {
   Serial1.begin(9600);
@@ -167,6 +173,9 @@ void setup() {
   stateBufferExpires = millis();
   
   lastRunDuration = 0;
+  lastRunStart = 0;
+  lastRunInterval = 0;
+  controlIters = 0;
   
   receiverArmingState = RECEIVER_ARMING_IDLE;
   receiverArmingEnding = millis();
@@ -397,6 +406,12 @@ void position_loop() {
     
     lastRunDuration = ( micros() - m );
     
+    if ( lastRunStart != 0 ) {
+      lastRunInterval = m - lastRunStart;
+    }
+    lastRunStart = m;
+    controlIters++;
+    
     nextControlTime = m + CONTROL_FREQUENCY;
   }
 }
@@ -416,6 +431,12 @@ void control_loop() {
     update_motors();
     
     lastRunDuration = ( micros() - m );
+    
+    if ( lastRunStart != 0 ) {
+      lastRunInterval = m - lastRunStart;
+    }
+    lastRunStart = m;
+    controlIters++;
     
     nextControlTime = m + CONTROL_FREQUENCY;
   }
@@ -468,6 +489,8 @@ void control_loop_update( unsigned long m ) {
       motorAdjusts[1] = controller.motorAdjusts[1];
       motorAdjusts[2] = controller.motorAdjusts[2];
       motorAdjusts[3] = controller.motorAdjusts[3];
+      
+      zRotAdjust = controller.zRotAdjust;
     }
   } else if ( target >= CONTROL_ENGAGE_THRESHOLD_HIGH ) {
     controller.reset( m );
@@ -479,6 +502,8 @@ void control_loop_update( unsigned long m ) {
     motorAdjusts[2] = controller.motorAdjusts[2];
     motorAdjusts[3] = controller.motorAdjusts[3];
     
+    zRotAdjust = controller.zRotAdjust;
+    
     controlEngaged = true;
   }
   
@@ -487,10 +512,12 @@ void control_loop_update( unsigned long m ) {
   motorAdjusts[2] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[2] ) );
   motorAdjusts[3] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[3] ) );
   
-  motorValues[0] = max( min( target + motorAdjusts[0], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
-  motorValues[1] = max( min( target + motorAdjusts[1], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
-  motorValues[2] = max( min( target + motorAdjusts[2], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
-  motorValues[3] = max( min( target + motorAdjusts[3], MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  zRotAdjust = max( MAX_MOTOR_ZROT_ADJUST, min( MAX_MOTOR_ZROT_ADJUST, zRotAdjust ) );
+  
+  motorValues[0] = max( min( target + motorAdjusts[0] + zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[1] = max( min( target + motorAdjusts[1] - zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[2] = max( min( target + motorAdjusts[2] + zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[3] = max( min( target + motorAdjusts[3] - zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
 }
 
 void arm_motors() {
@@ -553,7 +580,13 @@ void log_data() {
   Serial1.print(millis());
   
   Serial1.print('\t');
+  Serial1.print(controlIters);
+  
+  Serial1.print('\t');
   Serial1.print(lastRunDuration);
+  
+  Serial1.print('\t');
+  Serial1.print(lastRunInterval);
   
   Serial1.print('\t');
   Serial1.print(accelValues[X]);
@@ -587,11 +620,15 @@ void log_data() {
   Serial1.print(controller.pidA.error);
   Serial1.print('\t');
   Serial1.print(controller.pidB.error);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotate.error);
   
   Serial1.print('\t');
   Serial1.print(motorMaster);
   
   Serial1.println();
+  
+  controlIters = 0;
   
   nextLogTime = millis() + LOG_FREQUENCY;
 }
@@ -601,6 +638,8 @@ void log_pid() {
   Serial1.print(millis());
   Serial1.print("\tA\t");
   Serial1.print(controller.pidATuner.getLastError(), 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidATuner.getBestError(), 5);
   Serial1.print('\t');
   Serial1.print(controller.pidATuner.getAdjusts()[0], 5);
   Serial1.print('\t');
@@ -620,6 +659,8 @@ void log_pid() {
   Serial1.print("\tB\t");
   Serial1.print(controller.pidBTuner.getLastError(), 5);
   Serial1.print('\t');
+  Serial1.print(controller.pidBTuner.getBestError(), 5);
+  Serial1.print('\t');
   Serial1.print(controller.pidBTuner.getAdjusts()[0], 5);
   Serial1.print('\t');
   Serial1.print(controller.pidBTuner.getAdjusts()[1], 5);
@@ -637,6 +678,8 @@ void log_pid() {
   Serial1.print(millis());
   Serial1.print("\tR\t");
   Serial1.print(controller.pidRotateTuner.getLastError(), 5);
+  Serial1.print('\t');
+  Serial1.print(controller.pidRotateTuner.getBestError(), 5);
   Serial1.print('\t');
   Serial1.print(controller.pidRotateTuner.getAdjusts()[0], 5);
   Serial1.print('\t');
