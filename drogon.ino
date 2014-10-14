@@ -21,6 +21,8 @@
  */
 
 #include <Servo.h>
+#include <math.h>
+
 
 #include <DrogonPosition.h>
 #include <DrogonController.h>
@@ -67,7 +69,7 @@ const int MIN_MOTOR_VALUE = 1000;
 const int MAX_MOTOR_VALUE = 2000; //2000;
 const float MAX_MOTOR_ADJUST = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.25;
 const float MIN_MOTOR_ADJUST = -MAX_MOTOR_ADJUST;
-const float MAX_MOTOR_ZROT_ADJUST = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1;
+const float MAX_MOTOR_ZROT_ADJUST = ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.15;
 const float MIN_MOTOR_ZROT_ADJUST = -MAX_MOTOR_ZROT_ADJUST;
 const float MOTOR_DIFF_SCALE = 0.1;
 
@@ -427,6 +429,7 @@ void control_loop() {
   unsigned long m = micros();
   if ( m >= nextControlTime ) {
     control_loop_update( m );
+    //control_loop_update_receiver( m );
     
     update_motors();
     
@@ -476,10 +479,12 @@ void control_loop_update( unsigned long m ) {
       log_pid( );
       controller.reset( m );
       
-      motorAdjusts[0] = 0;
-      motorAdjusts[1] = 0;
-      motorAdjusts[2] = 0;
-      motorAdjusts[3] = 0;
+      motorAdjusts[0] = 0.0;
+      motorAdjusts[1] = 0.0;
+      motorAdjusts[2] = 0.0;
+      motorAdjusts[3] = 0.0;
+      
+      zRotAdjust = 0.0;
       
       controlEngaged = false;
     } else {
@@ -512,7 +517,82 @@ void control_loop_update( unsigned long m ) {
   motorAdjusts[2] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[2] ) );
   motorAdjusts[3] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[3] ) );
   
-  zRotAdjust = max( MAX_MOTOR_ZROT_ADJUST, min( MAX_MOTOR_ZROT_ADJUST, zRotAdjust ) );
+  zRotAdjust = max( MIN_MOTOR_ZROT_ADJUST, min( MAX_MOTOR_ZROT_ADJUST, zRotAdjust ) );
+  
+  motorValues[0] = max( min( target + motorAdjusts[0] + zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[1] = max( min( target + motorAdjusts[1] - zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[2] = max( min( target + motorAdjusts[2] + zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+  motorValues[3] = max( min( target + motorAdjusts[3] - zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
+}
+
+void control_loop_update_receiver( unsigned long m ) {
+  position_update( m );
+  
+  if ( receiver_ready() ) {
+    double receiver0 = receiver_get_value(0);
+    double receiver1 = receiver_get_value(1);
+    
+    double receiver2 = receiver_get_value(2);
+    double receiver3 = receiver_get_value(3);
+    
+    double motorMasterUpdate = -receiver2;
+    if ( ( motorMasterUpdate - motorMaster ) > MAX_MOTOR_MASTER_CHANGE ) {
+      motorMaster += MAX_MOTOR_MASTER_CHANGE;
+    } else if ( ( motorMaster - motorMasterUpdate ) > MAX_MOTOR_MASTER_CHANGE ) {
+      motorMaster -= MAX_MOTOR_MASTER_CHANGE;
+    } else {
+      motorMaster = motorMasterUpdate;
+    }
+    
+    
+    double x = receiver0;
+    double y = -receiver1;
+    double ang = 0.0;
+    if ( y != 0 ) {
+      ang = atan(x/y);
+    }
+    
+    double adj1 = 0.0;
+    double adj2 = 0.0;
+    
+    if ( x > 0 ) {
+      adj1 = ((PI/2.0) - ( abs(ang + PI/4.0) )) / (PI/2.0);
+      adj2 = -((PI/2.0) - ( abs(ang - PI/4.0) )) / (PI/2.0);
+    } else {
+      adj1 = -((PI/2.0) - ( abs(ang + PI/4.0) )) / (PI/2.0);
+      adj2 = ((PI/2.0) - ( abs(ang - PI/4.0) )) / (PI/2.0);
+    }
+    
+    double sinAng = sin(ang);
+    double offset = 0.0;
+    if ( sinAng != 0.0 ) {
+      offset = abs(y / sinAng);
+    }
+    double scale = MAX_MOTOR_ADJUST * offset / 100.0;
+    
+    motorAdjusts[0] = adj1 * scale;
+    motorAdjusts[1] = adj2 * scale;
+    motorAdjusts[2] = -adj1 * scale;
+    motorAdjusts[3] = -adj2 * scale;
+      
+    zRotAdjust = MAX_MOTOR_ZROT_ADJUST * receiver3 / 100.0;
+    
+  } else {
+    motorMaster -= MOTOR_MASTER_STOP_CHANGE;
+    if ( motorMaster < 0.0 ) {
+      motorMaster = 0.0;
+    }
+  }
+    
+  int target = (int) map_double( motorMaster, 0.0, 100.0, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
+  target = constrain( target, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
+  
+  motorAdjusts[0] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[0] ) );
+  motorAdjusts[1] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[1] ) );
+  motorAdjusts[2] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[2] ) );
+  motorAdjusts[3] = max( MIN_MOTOR_ADJUST, min( MAX_MOTOR_ADJUST, motorAdjusts[3] ) );
+  
+  zRotAdjust = max( MIN_MOTOR_ZROT_ADJUST, min( MAX_MOTOR_ZROT_ADJUST, zRotAdjust ) );
   
   motorValues[0] = max( min( target + motorAdjusts[0] + zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
   motorValues[1] = max( min( target + motorAdjusts[1] - zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
