@@ -23,7 +23,7 @@
 #include <Servo.h>
 #include <math.h>
 
-
+#include <DrogonConstants.h>
 #include <DrogonPosition.h>
 #include <DrogonController.h>
 
@@ -342,6 +342,9 @@ void read_serial() {
 
 void parse_serial_command() {
   int i, armUpdate;
+
+  double kp = 0.0, ki = 0.0, kd = 0.0;
+      
   switch( serialReadBuffer[0] ) {
     case 'A':
       i = 1;
@@ -392,12 +395,105 @@ void parse_serial_command() {
         Serial1.println();
       }
       break;
+    case 'P':
+      i = 1;
+      while ( serialReadBuffer[i] == ' ' || serialReadBuffer[i] == '\t' ) {
+        if ( serialReadBuffer[i] == '\0' ) {
+          if ( DEBUG ) Serial1.println("D\tPID COMMAND NOT VALID");
+          return;
+        }
+        i++;
+        if ( i >= SERIAL_READ_BUFFER_SIZE ) {
+          if ( DEBUG ) Serial1.println("D\tPID COMMAND NOT VALID");
+          return;
+        }
+      }
+      
+      DrogonPid *pid;
+      DrogonPidTuner *tuner;
+      switch ( serialReadBuffer[i] ) {
+      case 'A':
+        pid = &controller.pidA;
+        tuner = &controller.pidATuner;
+        break;
+      case 'B':
+        pid = &controller.pidB;
+        tuner = &controller.pidBTuner;
+        break;
+      case 'R':
+        pid = &controller.pidRotate;
+        tuner = &controller.pidRotateTuner;
+        break;
+      default:
+        if ( DEBUG ) Serial1.println("D\tMOTOR COMMAND NOT VALID");
+        return;
+      }
+      
+      i = read_float( i, &kp );
+      if ( i < 0 ) {
+        if ( DEBUG ) Serial1.println("D\tPID COMMAND NOT VALID");
+        return;
+      }
+      
+      i = read_float( i, &ki );
+      if ( i < 0 ) {
+        if ( DEBUG ) Serial1.println("D\tPID COMMAND NOT VALID");
+        return;
+      }
+      
+      i = read_float( i, &kd );
+      if ( i < 0 ) {
+        if ( DEBUG ) Serial1.println("D\tPID COMMAND NOT VALID");
+        return;
+      }
+      
+      pid->set_thetas( kp, ki, kd );
+      tuner->set_adjusts( kp * TUNER_INIT, ki * TUNER_INIT, kd * TUNER_INIT );
+      tuner->reset();
+      
+      log_pid();
+      
+      break;
     default:
       Serial1.print("D\tINVALID COMMAND: ");
       Serial1.print(serialReadBuffer[0]);
       Serial1.println();
       break;
   }
+}
+
+int read_float( int i, double *value ) {
+  i += 1;
+  if ( i >= SERIAL_READ_BUFFER_SIZE ) {
+    return -1;
+  }
+  if ( serialReadBuffer[i] == '\0' ) {
+    return -1;
+  }
+  
+  while ( serialReadBuffer[i] != ' ' && serialReadBuffer[i] != '\t' ) {
+    if ( serialReadBuffer[i] == '\0' ) {
+      return -1;
+    }
+    i++;
+    if ( i >= SERIAL_READ_BUFFER_SIZE ) {
+      return -1;
+    }
+  }
+  
+  while ( serialReadBuffer[i] == ' ' || serialReadBuffer[i] == '\t' ) {
+    if ( serialReadBuffer[i] == '\0' ) {
+      return -1;
+    }
+    i++;
+    if ( i >= SERIAL_READ_BUFFER_SIZE ) {
+      return -1;
+    }
+  }
+  
+  *value = atof(&serialReadBuffer[i]);
+      
+  return i;
 }
 
 void position_loop() {
@@ -491,11 +587,11 @@ void control_loop_update( unsigned long m ) {
       controller.control_update( m, motorRotate );
       
       motorAdjusts[0] = controller.motorAdjusts[0];
-      motorAdjusts[1] = controller.motorAdjusts[1];
+      //motorAdjusts[1] = controller.motorAdjusts[1];
       motorAdjusts[2] = controller.motorAdjusts[2];
-      motorAdjusts[3] = controller.motorAdjusts[3];
+      //motorAdjusts[3] = controller.motorAdjusts[3];
       
-      zRotAdjust = controller.zRotAdjust;
+      //zRotAdjust = controller.zRotAdjust;
     }
   } else if ( target >= CONTROL_ENGAGE_THRESHOLD_HIGH ) {
     controller.reset( m );
@@ -503,11 +599,11 @@ void control_loop_update( unsigned long m ) {
     controller.control_update( m, motorRotate );
     
     motorAdjusts[0] = controller.motorAdjusts[0];
-    motorAdjusts[1] = controller.motorAdjusts[1];
+    //motorAdjusts[1] = controller.motorAdjusts[1];
     motorAdjusts[2] = controller.motorAdjusts[2];
-    motorAdjusts[3] = controller.motorAdjusts[3];
+    //motorAdjusts[3] = controller.motorAdjusts[3];
     
-    zRotAdjust = controller.zRotAdjust;
+    //zRotAdjust = controller.zRotAdjust;
     
     controlEngaged = true;
   }
@@ -717,15 +813,15 @@ void log_pid() {
   Serial1.print("P\t"); // arduino data log event
   Serial1.print(millis());
   Serial1.print("\tA\t");
-  Serial1.print(controller.pidATuner.getLastError(), 5);
+  Serial1.print(controller.pidATuner.get_last_error(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getBestError(), 5);
+  Serial1.print(controller.pidATuner.get_best_error(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getAdjusts()[0], 5);
+  Serial1.print(controller.pidATuner.get_adjusts()[0], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getAdjusts()[1], 5);
+  Serial1.print(controller.pidATuner.get_adjusts()[1], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidATuner.getAdjusts()[2], 5);
+  Serial1.print(controller.pidATuner.get_adjusts()[2], 5);
   Serial1.print('\t');
   Serial1.print(controller.pidA.get_thetas()[0], 5);
   Serial1.print('\t');
@@ -737,15 +833,15 @@ void log_pid() {
   Serial1.print("P\t"); // arduino data log event
   Serial1.print(millis());
   Serial1.print("\tB\t");
-  Serial1.print(controller.pidBTuner.getLastError(), 5);
+  Serial1.print(controller.pidBTuner.get_last_error(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getBestError(), 5);
+  Serial1.print(controller.pidBTuner.get_best_error(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getAdjusts()[0], 5);
+  Serial1.print(controller.pidBTuner.get_adjusts()[0], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getAdjusts()[1], 5);
+  Serial1.print(controller.pidBTuner.get_adjusts()[1], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidBTuner.getAdjusts()[2], 5);
+  Serial1.print(controller.pidBTuner.get_adjusts()[2], 5);
   Serial1.print('\t');
   Serial1.print(controller.pidB.get_thetas()[0], 5);
   Serial1.print('\t');
@@ -757,15 +853,15 @@ void log_pid() {
   Serial1.print("P\t"); // arduino data log event
   Serial1.print(millis());
   Serial1.print("\tR\t");
-  Serial1.print(controller.pidRotateTuner.getLastError(), 5);
+  Serial1.print(controller.pidRotateTuner.get_last_error(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidRotateTuner.getBestError(), 5);
+  Serial1.print(controller.pidRotateTuner.get_best_error(), 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidRotateTuner.getAdjusts()[0], 5);
+  Serial1.print(controller.pidRotateTuner.get_adjusts()[0], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidRotateTuner.getAdjusts()[1], 5);
+  Serial1.print(controller.pidRotateTuner.get_adjusts()[1], 5);
   Serial1.print('\t');
-  Serial1.print(controller.pidRotateTuner.getAdjusts()[2], 5);
+  Serial1.print(controller.pidRotateTuner.get_adjusts()[2], 5);
   Serial1.print('\t');
   Serial1.print(controller.pidRotate.get_thetas()[0], 5);
   Serial1.print('\t');
