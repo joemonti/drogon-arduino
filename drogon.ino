@@ -132,6 +132,9 @@ unsigned long lastRunStart;
 unsigned long lastRunInterval;
 unsigned long controlIters;
 
+const long TUNER_FREQUENCY = 4000; // 4s
+unsigned long nextTuneTime;
+
 void setup() {
   Serial1.begin(9600);
   
@@ -185,6 +188,7 @@ void setup() {
   
   nextLogTime = millis();
   nextControlTime = micros();
+  nextTuneTime = millis();
   controlEngaged = false;
   
   if (DEBUG) Serial1.println("D\tSETUP FINISHED");
@@ -574,6 +578,7 @@ void control_loop_update( unsigned long m ) {
       controller.tune();
       log_pid( );
       controller.reset( m );
+      nextTuneTime = millis() + TUNER_FREQUENCY;
       
       motorAdjusts[0] = 0.0;
       motorAdjusts[1] = 0.0;
@@ -584,6 +589,12 @@ void control_loop_update( unsigned long m ) {
       
       controlEngaged = false;
     } else {
+      if ( millis() > nextTuneTime ) {
+        controller.tune();
+        log_pid( );
+        nextTuneTime = millis() + TUNER_FREQUENCY;
+      }
+      
       controller.control_update( m, motorRotate );
       
       motorAdjusts[0] = controller.motorAdjusts[0];
@@ -595,6 +606,7 @@ void control_loop_update( unsigned long m ) {
     }
   } else if ( target >= CONTROL_ENGAGE_THRESHOLD_HIGH ) {
     controller.reset( m );
+    nextTuneTime = millis() + TUNER_FREQUENCY;
     
     controller.control_update( m, motorRotate );
     
@@ -603,7 +615,7 @@ void control_loop_update( unsigned long m ) {
     motorAdjusts[2] = controller.motorAdjusts[2];
     //motorAdjusts[3] = controller.motorAdjusts[3];
     
-    //zRotAdjust = controller.zRotAdjust;
+    zRotAdjust = controller.zRotAdjust;
     
     controlEngaged = true;
   }
