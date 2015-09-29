@@ -37,14 +37,14 @@ const int RECEIVER_STATE_INITIALIZING = 1;
 const int RECEIVER_STATE_ZEROING = 2;
 const int RECEIVER_STATE_READY = 3;
 
-volatile unsigned long last_micros;
-volatile int initializedCount;
+unsigned long last_micros;
+int initializedCount;
+int channel;
+
 volatile int receiverState;
-volatile int channel;
-volatile int pulsesTmp[NUM_CHANNELS];
 volatile int pulses[NUM_CHANNELS];
 
-volatile long zeroReadyTime;
+long zeroReadyTime;
 volatile boolean zeroed;
 volatile int pulsesMinZero[NUM_CHANNELS];
 volatile int pulsesMaxZero[NUM_CHANNELS];
@@ -79,20 +79,16 @@ void receiver_interrupt( ) {
       if ( channel != NUM_CHANNELS ) {
         receiverState = RECEIVER_STATE_INITIALIZING;
       }
-      
-      for ( int i = 0; i< NUM_CHANNELS; i++ ) {
-        pulses[i] = pulsesTmp[i];
-      }
     } else if ( receiverState == RECEIVER_STATE_ZEROING ) {
       if ( channel != NUM_CHANNELS ) {
         receiverState = RECEIVER_STATE_INITIALIZING;
       } else {
         for ( int i = 0; i < NUM_CHANNELS; i++ ) {
-          if ( pulsesMinZero[i] == -1 || pulsesTmp[i] < pulsesMinZero[i] ) {
-            pulsesMinZero[i] = pulsesTmp[i];
+          if ( pulsesMinZero[i] == -1 || pulses[i] < pulsesMinZero[i] ) {
+            pulsesMinZero[i] = pulses[i];
           }
-          if ( pulsesMaxZero[i] == -1 || pulsesTmp[i] > pulsesMaxZero[i] ) {
-            pulsesMaxZero[i] = pulsesTmp[i];
+          if ( pulsesMaxZero[i] == -1 || pulses[i] > pulsesMaxZero[i] ) {
+            pulsesMaxZero[i] = pulses[i];
           }
         }
         
@@ -129,7 +125,7 @@ void receiver_interrupt( ) {
     channel = 0;
   } else if ( channel < NUM_CHANNELS ) {
     if ( gap >= MIN_IN_PULSE_WIDTH && gap <= MAX_IN_PULSE_WIDTH ) {
-      pulsesTmp[channel] = gap;
+      pulses[channel] = gap;
       channel++;
     } else if ( receiverState == RECEIVER_STATE_READY || receiverState == RECEIVER_STATE_ZEROING ) {
       receiverState = RECEIVER_STATE_INITIALIZING;
@@ -167,5 +163,5 @@ int receiver_get_pulse( int c ) {
 }
 
 int receiver_get_pulse_raw( int c ) {
-  return pulsesTmp[c];
+  return pulses[c];
 }
