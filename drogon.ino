@@ -34,8 +34,6 @@ const int MOTOR_PIN1 = 9;
 const int MOTOR_PIN2 = 10;
 const int MOTOR_PIN3 = 11;
 
-const int RECEIVER_PIN = 44;
-
 const int MOTOR_LED_PIN0 = 46;
 const int MOTOR_LED_PIN1 = 48;
 const int MOTOR_LED_PIN2 = 50;
@@ -102,26 +100,19 @@ const double MOTOR_MASTER_STOP_CHANGE = 0.1;
 
 long stateBufferExpires;
 
-const long RECEIVER_ARMING_TIME = 3000;
-const long RECEIVER_DISARMING_TIME = 500;
-const long RECEIVER_ARMING_COOLDOWN_TIME = 1000;
-const int RECEIVER_ARMING_IDLE = 0;
-const int RECEIVER_ARMING_PENDING = 1;
-const int RECEIVER_ARMING_COOLDOWN = 2;
-int receiverArmingState;
-long receiverArmingEnding;
-long receiverArmingCooldown;
-
 const int SERIAL_READ_BUFFER_SIZE = 512;
 char* serialReadBuffer;
 int serialReadBufferIndex = 0;
 
-const long LOG_FREQUENCY = 20;
+const long LOG_FREQUENCY = 50;
 long nextLogTime;
 
 const int CONTROL_ENGAGE_THRESHOLD_HIGH = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.1 );
 const int CONTROL_ENGAGE_THRESHOLD_LOW = MIN_MOTOR_VALUE + (int) ( ( MAX_MOTOR_VALUE - MIN_MOTOR_VALUE ) * 0.08 );
 boolean controlEngaged;
+
+const long controlTimeout = 5000;
+long lastControlUpdate;
 
 DrogonPosition pos;
 DrogonController controller(&pos);
@@ -163,8 +154,6 @@ void setup() {
   motorRotate[1] = 0.0;
   motorRotate[2] = 0.0;
   
-  receiver_setup();
-  
   led_setup( MOTOR_LED_PIN0,
              MOTOR_LED_PIN1,
              MOTOR_LED_PIN2,
@@ -181,10 +170,6 @@ void setup() {
   lastRunStart = 0;
   lastRunInterval = 0;
   controlIters = 0;
-  
-  receiverArmingState = RECEIVER_ARMING_IDLE;
-  receiverArmingEnding = millis();
-  receiverArmingCooldown = millis();
   
   nextLogTime = millis();
   nextControlTime = micros();
@@ -218,7 +203,7 @@ void loop() {
       
       zeroIterCount++;
       
-      if ( receiver_ready() && zeroIterCount >= ZERO_ITERS ) {
+      if ( zeroIterCount >= ZERO_ITERS ) {
         accel_zero();
         gyro_zero();
         
@@ -232,94 +217,8 @@ void loop() {
     }
   } else if ( state == STATE_READY ) {
     position_loop();
-    
-    if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
-      if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
-        if ( DEBUG ) Serial1.println("5\tARMING COOLDOWN BOUNCING");
-        receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-      } else if ( millis() >= receiverArmingEnding ) {
-        state = STATE_ARMED;
-        stateBufferExpires = millis() + STATE_BUFFER_TIME_ARMED;
-        
-        receiverArmingState = RECEIVER_ARMING_IDLE;
-        
-        arm_motors();
-        if ( DEBUG ) Serial1.println("5\tARMING FINISHED");
-        if ( DEBUG ) Serial1.println("5\tSTATE : ARMED");
-      }
-    } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
-      if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
-        if ( millis() >= receiverArmingEnding ) {
-          receiverArmingState = RECEIVER_ARMING_COOLDOWN;
-          receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-          if ( DEBUG ) Serial1.println("5\tARMING COOLDOWN");
-        } else {
-          if ( DEBUG ) Serial1.println("5\tARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-        }
-      } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
-        if ( millis() < receiverArmingEnding ) {
-          if ( DEBUG ) Serial1.println("5\tARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-        }
-      }
-    } else {
-      if ( receiver_get_value( 4 ) >= 80 && receiver_get_value( 5 ) >= 80 ) {
-        receiverArmingState = RECEIVER_ARMING_PENDING;
-        receiverArmingEnding = millis() + RECEIVER_ARMING_TIME;
-        
-        if ( DEBUG ) Serial1.println("5\tARMING START");
-      }
-    }
   } else if ( state == STATE_ARMED ) {
-    if ( receiverArmingState == RECEIVER_ARMING_COOLDOWN ) {
-      if ( receiver_get_value( 4 ) != 0 || receiver_get_value( 5 ) != 0 ) {
-        if ( DEBUG ) Serial1.println("5\tDISARMING COOLDOWN BOUNCING");
-        receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-      } else if ( millis() >= receiverArmingEnding ) {
-        state = STATE_READY;
-        stateBufferExpires = millis() + STATE_BUFFER_TIME;
-        
-        receiverArmingState = RECEIVER_ARMING_IDLE;
-        
-        if ( DEBUG ) Serial1.println("5\tDISARMING FINISHED");
-        if ( DEBUG ) Serial1.println("5\tSTATE : READY");
-      }
-    } else if ( receiverArmingState == RECEIVER_ARMING_PENDING ) {
-      if ( receiver_get_value( 4 ) == 0 && receiver_get_value( 5 ) == 0 ) {
-        if ( millis() >= receiverArmingEnding ) {
-          receiverArmingState = RECEIVER_ARMING_COOLDOWN;
-          receiverArmingEnding = millis() + RECEIVER_ARMING_COOLDOWN_TIME;
-          if ( DEBUG ) Serial1.println("5\tDISARMING COOLDOWN");
-          
-          // disarming has started, shut down while waiting for cooldown
-          disarm_motors();
-        } else {
-          if ( DEBUG ) Serial1.println("5\tDISARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-          
-          // disarming cancelled, continue control loop
-          control_loop();
-        }
-      } else if ( receiver_get_value( 4 ) < 80 || receiver_get_value( 5 ) < 80 ) {
-        if ( millis() < receiverArmingEnding ) {
-          if ( DEBUG ) Serial1.println("5\tDISARMING PENDING CANCELLED");
-          receiverArmingState = RECEIVER_ARMING_IDLE;
-          
-          // disarming cancelled, continue control loop
-          control_loop();
-        }
-      }
-    } else {
-      if ( receiver_get_value( 4 ) >= 80 && receiver_get_value( 5 ) >= 80 ) {
-        receiverArmingState = RECEIVER_ARMING_PENDING;
-        receiverArmingEnding = millis() + RECEIVER_DISARMING_TIME;
-        
-        if ( DEBUG ) Serial1.println("5\tDISARMING START");
-      }
-      
-      control_loop();
-    }
+    control_loop();
   }
 }
 
@@ -378,6 +277,7 @@ void parse_serial_command() {
           if ( DEBUG ) Serial1.println("D\tSTATE : READY");
         }
       }
+      lastControlUpdate = millis();
       break;
     case 'M':
       i = 1;
@@ -398,6 +298,7 @@ void parse_serial_command() {
         Serial1.print(motorMaster);
         Serial1.println();
       }
+      lastControlUpdate = millis();
       break;
     case 'P':
       i = 1;
@@ -528,18 +429,24 @@ void position_update( unsigned long m ) {
 void control_loop() {
   unsigned long m = micros();
   if ( m >= nextControlTime ) {
-    control_loop_update( m );
-    //control_loop_update_receiver( m );
-    
-    update_motors();
-    
-    lastRunDuration = ( micros() - m );
-    
-    if ( lastRunStart != 0 ) {
-      lastRunInterval = m - lastRunStart;
+
+    if ( ( millis() - lastControlUpdate ) > controlTimeout ) {
+      motorMaster = 0;
+      disarm_motors();
+      if (DEBUG) Serial1.println("D\tCONTROL UPDATE TIMEOUT, DISABLING MOTORS");
+    } else {
+      control_loop_update( m );
+      
+      update_motors();
+      
+      lastRunDuration = ( micros() - m );
+      
+      if ( lastRunStart != 0 ) {
+        lastRunInterval = m - lastRunStart;
+      }
+      lastRunStart = m;
+      controlIters++;
     }
-    lastRunStart = m;
-    controlIters++;
     
     nextControlTime = m + CONTROL_FREQUENCY;
   }
@@ -547,24 +454,6 @@ void control_loop() {
 
 void control_loop_update( unsigned long m ) {
   position_update( m );
-  
-  if ( receiver_ready() ) {
-    double receiver2 = receiver_get_value(2);
-    
-    double motorMasterUpdate = -receiver2;
-    if ( ( motorMasterUpdate - motorMaster ) > MAX_MOTOR_MASTER_CHANGE ) {
-      motorMaster += MAX_MOTOR_MASTER_CHANGE;
-    } else if ( ( motorMaster - motorMasterUpdate ) > MAX_MOTOR_MASTER_CHANGE ) {
-      motorMaster -= MAX_MOTOR_MASTER_CHANGE;
-    } else {
-      motorMaster = motorMasterUpdate;
-    }
-  } else {
-    motorMaster -= MOTOR_MASTER_STOP_CHANGE;
-    if ( motorMaster < 0.0 ) {
-      motorMaster = 0.0;
-    }
-  }
     
   int target = (int) map_double( motorMaster, 0.0, 100.0, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
   target = constrain( target, MIN_MOTOR_VALUE, MAX_MOTOR_VALUE );
@@ -633,6 +522,7 @@ void control_loop_update( unsigned long m ) {
   motorValues[3] = max( min( target + motorAdjusts[3] - zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
 }
 
+/*
 void control_loop_update_receiver( unsigned long m ) {
   position_update( m );
   
@@ -707,6 +597,7 @@ void control_loop_update_receiver( unsigned long m ) {
   motorValues[2] = max( min( target + motorAdjusts[2] + zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
   motorValues[3] = max( min( target + motorAdjusts[3] - zRotAdjust, MAX_MOTOR_VALUE ), MIN_MOTOR_VALUE );
 }
+*/
 
 void arm_motors() {
   motor0.attach( MOTOR_PIN0 );
